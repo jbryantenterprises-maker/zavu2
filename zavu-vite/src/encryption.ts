@@ -38,10 +38,14 @@ export class FileEncryption {
   /**
    * Encrypt a file before sending
    */
-  static async encryptFile(file: ArrayBuffer): Promise<EncryptionResult> {
+  static async encryptFile(
+    file: ArrayBuffer,
+    existingKey?: CryptoKey,
+    existingIV?: Uint8Array
+  ): Promise<EncryptionResult> {
     try {
-      const key = await this.generateKey();
-      const iv = this.generateIV();
+      const key = existingKey || await this.generateKey();
+      const iv = existingIV || this.generateIV();
 
       const encryptedData = await window.crypto.subtle.encrypt(
         {

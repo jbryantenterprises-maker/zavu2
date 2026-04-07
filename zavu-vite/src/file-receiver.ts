@@ -105,9 +105,6 @@ export class FileReceiver {
    */
   reset() {
     this.receivedChunks = [];
-    this.fileMetadata = null;
-    this.encryptionKey = null;
-    this.encryptionIV = null;
   }
 
   /**

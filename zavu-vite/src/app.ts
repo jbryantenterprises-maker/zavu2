@@ -6,6 +6,8 @@ import { UIHelper } from './ui-helpers.js';
 import { CloudStorageFallback, type CloudStorageConfig } from './cloud-storage.js';
 import { FileEncryption } from './encryption.js';
 import { FileReceiver } from './file-receiver.js';
+import { AuthService } from './auth.js';
+import { PaymentService } from './payment.js';
 
 export class ZavuApp {
   private webrtc: WebRTCManager;
@@ -41,6 +43,53 @@ export class ZavuApp {
     this.checkForReceiverLink();
     this.checkResumeState();
     this.setupBeforeUnload();
+
+    // Auth & Payments
+    AuthService.init();
+    PaymentService.init();
+    AuthService.onAuthStateChanged((user) => this.updateAuthUI(user));
+  }
+
+  private updateAuthUI(user: any) {
+    const authBtn = document.getElementById('auth-btn');
+    if (user) {
+      if (authBtn) authBtn.textContent = 'Sign Out';
+      UIHelper.showElement('user-name');
+      UIHelper.updateElementText('user-name', user.displayName || user.email || 'You');
+      
+      if (user.isPro) {
+        UIHelper.hideElement('upgrade-btn');
+        UIHelper.showElement('pro-badge');
+      } else {
+        UIHelper.showElement('upgrade-btn');
+        UIHelper.hideElement('pro-badge');
+      }
+    } else {
+      if (authBtn) authBtn.textContent = 'Sign In';
+      UIHelper.hideElement('upgrade-btn');
+      UIHelper.hideElement('pro-badge');
+      UIHelper.hideElement('user-name');
+    }
+  }
+
+  handleAuthClick() {
+    if (AuthService.getUser()) {
+      AuthService.signOut();
+    } else {
+      AuthService.signInWithGoogle();
+    }
+  }
+
+  checkoutPro() {
+    PaymentService.upgradeToPro();
+  }
+
+  handleProToggle(checkbox: HTMLInputElement, feature: string) {
+    const user = AuthService.getUser();
+    if (!user || !user.isPro) {
+       checkbox.checked = false;
+       alert(`You need to upgrade to Pro to use the "${feature}" feature.`);
+    }
   }
 
   private setupEventListeners() {
@@ -118,6 +167,17 @@ export class ZavuApp {
 
     const files = this.fileHandler.getSelectedFiles();
     const totalSize = this.fileHandler.getTotalSize();
+
+    // Enforce Pro limitations
+    const user = AuthService.getUser();
+    const isPro = user?.isPro || false;
+    const maxFreeSize = 500 * 1024 * 1024; // 500 MB
+
+    if (!isPro && totalSize > maxFreeSize) {
+      alert(`Free accounts are limited to 500MB per transfer. You selected ${formatBytes(totalSize)}.\nPlease sign in and upgrade to Pro to send unlimited size files.`);
+      this.clearFile();
+      return;
+    }
     
     if (files.length === 1) {
       UIHelper.updateElementText('file-name', files[0].name);
@@ -275,7 +335,11 @@ export class ZavuApp {
       
       // Read and encrypt the entire file first
       const fileArrayBuffer = await file.arrayBuffer();
-      const encryptedResult = await FileEncryption.encryptFile(fileArrayBuffer);
+      const encryptedResult = await FileEncryption.encryptFile(
+        fileArrayBuffer, 
+        this.encryptionKey!, 
+        this.encryptionIV!
+      );
 
       this.webrtc.sendSignalData({ 
         type: 'next_file', 
@@ -320,9 +384,15 @@ export class ZavuApp {
         if (currentFileOffset < encryptedResult.encryptedData.byteLength) {
           readNextChunk();
         } else {
-          setTimeout(() => {
-            this.webrtc.sendSignalData({ type: 'file_end', index: index }, peerTarget);
-            sendFile(index + 1, 0);
+          // Wait until ALL chunks have been acknowledged by the receiver
+          const waitAcks = setInterval(() => {
+            if (this.unackedChunks === 0) {
+              clearInterval(waitAcks);
+              setTimeout(() => {
+                this.webrtc.sendSignalData({ type: 'file_end', index: index }, peerTarget);
+                sendFile(index + 1, 0);
+              }, 50);
+            }
           }, 50);
         }
       };
@@ -395,7 +465,8 @@ export class ZavuApp {
   private setupReceiverListeners() {
     this.webrtc.onPeerJoin((peerId) => {
       console.log('Detected connected peer in room:', peerId);
-      // We don't change UI until we get metadata
+      // Save the sender's real peer ID so we can request the download from them
+      this.webrtc.setCurrentPeer(peerId);
     });
 
     this.fileReceiver = new FileReceiver(
@@ -516,14 +587,22 @@ export class ZavuApp {
       try {
         const state = JSON.parse(stateJson);
         const names = state.files.map((f: FileMetadata) => f.name).join(', ');
-        UIHelper.updateElementText('resume-file-name', 
-          state.files.length > 1 ? 
-            `${state.files.length} files (${names.substring(0, 30)}...)` : 
-            state.files[0].name
-        );
-        UIHelper.hideElement('landing-screen');
-        UIHelper.showElement('resume-screen');
-      } catch(e) {}
+        const resumeScreen = document.getElementById('resume-screen');
+        if (resumeScreen) {
+          UIHelper.updateElementText('resume-file-name', 
+            state.files.length > 1 ? 
+              `${state.files.length} files (${names.substring(0, 30)}...)` : 
+              state.files[0].name
+          );
+          UIHelper.hideElement('landing-screen');
+          UIHelper.showElement('resume-screen');
+        } else {
+          // If resume UI doesn't exist, just clear the stale state
+          localStorage.removeItem('zavuSenderState');
+        }
+      } catch(e) {
+        localStorage.removeItem('zavuSenderState');
+      }
     }
   }
 

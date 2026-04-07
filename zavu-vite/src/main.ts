@@ -24,7 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
     'showQR',
     'hideQR',
     'cancelTransfer',
-    'startDownload'
+    'startDownload',
+    'handleAuthClick',
+    'checkoutPro',
+    'handleProToggle'
   ]
   
   methods.forEach(method => {
