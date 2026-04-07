@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260405.1",
     "@types/qrcode": "^1.5.6",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
@@ -19,6 +20,7 @@
   "dependencies": {
     "@lemonsqueezy/lemonsqueezy.js": "^4.0.0",
     "firebase": "^12.11.0",
+    "jose": "^6.2.2",
     "qrcode": "^1.5.4",
     "trystero": "^0.23.0"
   }

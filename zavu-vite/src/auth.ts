@@ -101,4 +101,19 @@ export class AuthService {
   static getUser(): ZavuUser | null {
     return this.user;
   }
+
+  /**
+   * Get the current Firebase ID token (JWT) for authenticating API calls.
+   * Returns null if no user is signed in.
+   */
+  static async getIdToken(): Promise<string | null> {
+    if (!auth) return null;
+    const currentUser = auth.currentUser;
+    if (!currentUser) return null;
+    try {
+      return await currentUser.getIdToken();
+    } catch {
+      return null;
+    }
+  }
 }

@@ -42,9 +42,9 @@ export class PaymentService {
         window.open(checkoutUrl, '_blank');
       }
 
-      // For testing exclusively - mocking upgrade:
-      if (storeId === "YOUR_STORE_ID") {
-         console.warn("MOCKING PRO UPGRADE!");
+      // For testing exclusively - mocking upgrade (DEV only):
+      if (import.meta.env.DEV && storeId === "YOUR_STORE_ID") {
+         console.warn("MOCKING PRO UPGRADE (dev only)!");
          localStorage.setItem(`zavu_pro_${user.uid}`, "true");
          alert("Mock Pro Upgrade Successful! Please refresh.");
          window.location.reload();

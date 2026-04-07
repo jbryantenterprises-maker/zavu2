@@ -1,0 +1,7 @@
+name = "zavu"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "ZAVU_BUCKET"
+bucket_name = "zavu-uploads"

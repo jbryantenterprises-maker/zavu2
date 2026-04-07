@@ -3,16 +3,26 @@ import type { SignalData, FileMetadata } from './webrtc.js';
 import { FileHandler, formatBytes } from './file-handler.js';
 import type { SelectedFile } from './file-handler.js';
 import { UIHelper } from './ui-helpers.js';
-import { CloudStorageFallback, type CloudStorageConfig } from './cloud-storage.js';
+import { CloudStorageService } from './cloud-storage.js';
 import { FileEncryption } from './encryption.js';
 import { FileReceiver } from './file-receiver.js';
 import { AuthService } from './auth.js';
 import { PaymentService } from './payment.js';
 
+/** Escape HTML special characters to prevent XSS when inserting user content */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export class ZavuApp {
   private webrtc: WebRTCManager;
   private fileHandler: FileHandler;
-  private cloudStorage: CloudStorageFallback;
+  private cloudStorage: CloudStorageService;
   private encryptionKey: CryptoKey | null = null;
   private encryptionIV: Uint8Array | null = null;
   private transferInProgress: boolean = false;
@@ -27,13 +37,8 @@ export class ZavuApp {
     this.webrtc = new WebRTCManager();
     this.fileHandler = new FileHandler();
     
-    // Initialize cloud storage fallback
-    const cloudConfig: CloudStorageConfig = {
-      provider: 'supabase', // Configure as needed
-      bucketName: 'your-bucket-name',
-      region: 'us-east-1'
-    };
-    this.cloudStorage = new CloudStorageFallback(cloudConfig);
+    // Initialize cloud storage service (Cloudflare R2)
+    this.cloudStorage = new CloudStorageService();
     
     this.init();
   }
@@ -204,6 +209,16 @@ export class ZavuApp {
       return;
     }
 
+    const isCloudUpload = (document.getElementById('cloud-upload-checkbox') as HTMLInputElement)?.checked;
+    if (isCloudUpload) {
+      const user = AuthService.getUser();
+      if (!user || !user.isPro) {
+        alert('You need a Pro account to use cloud uploads.');
+        return;
+      }
+      return this.uploadDirectToCloud(files);
+    }
+
     UIHelper.hideElement('file-preview');
     UIHelper.hideElement('drop-zone');
 
@@ -211,7 +226,7 @@ export class ZavuApp {
     this.encryptionKey = await FileEncryption.generateKey();
     this.encryptionIV = FileEncryption.generateIV();
 
-    const roomId = existingId || Math.random().toString(36).substring(2, 12);
+    const roomId = existingId || crypto.randomUUID().replace(/-/g, '').substring(0, 12);
     
     this.webrtc.createRoom(roomId);
 
@@ -237,7 +252,7 @@ export class ZavuApp {
 
       UIHelper.updateElement('share-link-display', `
         <div class="flex items-center justify-between">
-          <span class="text-emerald-400 font-medium">${shareLink}</span>
+          <span class="text-emerald-400 font-medium">${escapeHtml(shareLink)}</span>
         </div>
       `);
 
@@ -270,8 +285,14 @@ export class ZavuApp {
     // Set timeout for P2P connection
     connectionTimeout = setTimeout(() => {
       if (!this.webrtc.getCurrentPeer()) {
-        console.log('P2P connection failed, falling back to cloud storage');
-        this.fallbackToCloudStorage(fileMetas);
+        const user = AuthService.getUser();
+        if (user?.isPro && this.cloudStorage.isConfigured()) {
+          console.log('P2P connection failed, falling back to cloud storage (Pro)');
+          this.fallbackToCloudStorage(fileMetas);
+        } else {
+          UIHelper.updateElement('peer-status', '<span class="text-yellow-400">⏳ Still waiting for receiver…</span>');
+          console.log('P2P connection pending — no cloud fallback (free user or R2 not configured)');
+        }
       }
     }, 10000); // 10 second timeout
 
@@ -333,12 +354,13 @@ export class ZavuApp {
       const chunkSize = 64 * 1024;
       let currentFileOffset = offset;
       
-      // Read and encrypt the entire file first
+      // Read and encrypt the entire file with a FRESH IV per file (AES-GCM requires unique IVs)
       const fileArrayBuffer = await file.arrayBuffer();
+      const perFileIV = FileEncryption.generateIV();
       const encryptedResult = await FileEncryption.encryptFile(
         fileArrayBuffer, 
         this.encryptionKey!, 
-        this.encryptionIV!
+        perFileIV
       );
 
       this.webrtc.sendSignalData({ 
@@ -346,7 +368,8 @@ export class ZavuApp {
         index: index, 
         name: file.name, 
         size: file.size, 
-        mime: file.type || 'application/octet-stream' 
+        mime: file.type || 'application/octet-stream',
+        encryptionIV: FileEncryption.ivToBase64(perFileIV)
       }, peerTarget);
       
       const readNextChunk = () => {
@@ -371,7 +394,7 @@ export class ZavuApp {
         UIHelper.updateElement('sender-progress-text', `
           ${progress}% • ${formatBytes(globalOffset)} / ${formatBytes(totalSize)} <br>
           <span class="text-xs text-zinc-500">Sending ${index + 1} of ${files.length} (encrypted)</span>
-        `);
+        `); // progress text is safe — no user-provided strings
 
         const elapsed = (Date.now() - startTime) / 1000;
         if (elapsed > 1) {
@@ -415,7 +438,7 @@ export class ZavuApp {
         const metadata = fileMetas[i];
         
         UIHelper.updateElement('sender-progress-text', `
-          Uploading ${i + 1} of ${files.length}: ${file.name}<br>
+          Uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
           <span class="text-xs text-zinc-500">Fallback to cloud storage</span>
         `);
         
@@ -425,7 +448,7 @@ export class ZavuApp {
           // Update UI with cloud download link
           UIHelper.updateElement('share-link-display', `
             <div class="flex items-center justify-between">
-              <span class="text-emerald-400 font-medium">${result.downloadUrl}</span>
+              <span class="text-emerald-400 font-medium">${escapeHtml(result.downloadUrl!)}</span>
             </div>
           `);
           
@@ -448,6 +471,69 @@ export class ZavuApp {
       UIHelper.updateElement('sender-progress-text', `
         ❌ Both P2P and cloud storage failed<br>
         <span class="text-xs text-red-500">Please try again</span>
+      `);
+    }
+  }
+
+  private async uploadDirectToCloud(files: File[]) {
+    UIHelper.hideElement('file-preview');
+    UIHelper.hideElement('drop-zone');
+    
+    UIHelper.showElement('link-screen');
+    UIHelper.updateElement('peer-status', '<span class="text-emerald-400">⚡ UPLOADING TO CLOUD (7-DAY LINK)</span>');
+    UIHelper.updateElementText('share-link-display', 'Uploading...');
+    
+    UIHelper.showElement('sender-progress-area');
+    UIHelper.setProgressBar('sender-progress-bar', 10); // Just a visual start
+    
+    const uploadedLinks: string[] = [];
+    const uploadedFileIds: string[] = [];
+    
+    try {
+      const fileMetas = this.fileHandler.getFileMetadata();
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const metadata = fileMetas[i];
+        
+        UIHelper.updateElement('sender-progress-text', `
+          Uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
+          <span class="text-xs text-emerald-400 font-medium">Creating 7-day permanent link</span>
+        `);
+        
+        const result = await this.cloudStorage.uploadFile(file, metadata);
+        
+        if (result.success && result.downloadUrl) {
+          uploadedLinks.push(result.downloadUrl);
+          if (result.fileId) uploadedFileIds.push(result.fileId);
+          
+          const progress = Math.round(((i + 1) / files.length) * 100);
+          UIHelper.setProgressBar('sender-progress-bar', progress);
+        } else {
+          throw new Error(result.error || `Upload failed for ${file.name}`);
+        }
+      }
+      
+      // Display all links
+      const linksHtml = uploadedLinks
+        .map(url => `<div class="mb-2"><span class="text-emerald-400 font-medium break-all text-xs lg:text-sm">${escapeHtml(url)}</span></div>`)
+        .join('');
+      UIHelper.updateElement('share-link-display', linksHtml);
+
+      UIHelper.updateElement('sender-progress-text', `
+        ✅ Upload complete! 🎉<br>
+        <span class="text-xs">Share the link${uploadedLinks.length > 1 ? 's' : ''} above (Valid for 7 days).</span>
+      `);
+      UIHelper.confettiBurst();
+      
+      localStorage.setItem('zavuCloudFiles', JSON.stringify({
+        fileIds: uploadedFileIds,
+        uploadTime: Date.now()
+      }));
+    } catch (error: any) {
+      console.error('Cloud storage upload failed:', error);
+      UIHelper.updateElement('sender-progress-text', `
+        ❌ Upload failed<br>
+        <span class="text-xs text-red-500">${escapeHtml(error.message || 'Please try again')}</span>
       `);
     }
   }
@@ -476,6 +562,10 @@ export class ZavuApp {
         UIHelper.updateElementText('receiver-progress-text', `${progress}%`);
       },
       (file) => {
+        // Revoke previous Object URL to prevent memory leaks
+        if (this.activeDownloadLink) {
+          URL.revokeObjectURL(this.activeDownloadLink);
+        }
         // Create an automatic download
         this.activeDownloadLink = URL.createObjectURL(file);
         const a = document.createElement('a');
@@ -521,6 +611,10 @@ export class ZavuApp {
         // Setup for next file
         this.currentReceivingFileIndex = data.index || 0;
         this.fileReceiver?.reset();
+        // Update per-file IV if provided (for AES-GCM security)
+        if (data.encryptionIV) {
+          this.fileReceiver?.updateIV(data.encryptionIV);
+        }
         UIHelper.updateElementText('receiver-progress-text', `Preparing file ${data.name}...`);
         UIHelper.setProgressBar('receiver-progress-bar', 0);
       } else if (data.type === 'file_end') {

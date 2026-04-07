@@ -1,109 +1,77 @@
-# Cloud Storage Integration for Zavu
+# Cloud Storage Integration for Zavu (Cloudflare R2 via Pages Functions)
 
 ## Overview
-This implementation adds a cloud storage fallback when P2P WebRTC connections fail, providing a cost-effective alternative to TURN servers.
+Zavu Pro users can create 7-day permanent download links by uploading files to Cloudflare R2. Uploads are handled by **Cloudflare Pages Functions** — lightweight serverless functions that deploy automatically with your Pages site.
 
-## Cost Comparison
+## Architecture
 
-### TURN Server (Current Trystero fallback)
-- **Cost**: $0.10-0.50 per GB relayed
-- **Use case**: Real-time relay when P2P blocked
-- **Pros**: Immediate transfer, no storage
-- **Cons**: Ongoing bandwidth costs
+```
+Browser  →  POST /api/upload (file + Firebase JWT)  →  Pages Function  →  R2 Bucket
+Browser  ←  { downloadUrl: "/api/download/..." }    ←  Pages Function
 
-### Cloud Storage Fallback (New implementation)
-- **Storage**: $0.02-0.05 per GB/month
-- **Egress**: $0.05-0.15 per GB (one-time)
-- **Use case**: Upload when P2P fails, download anytime
-- **Pros**: Potentially cheaper, files available 24/7
-- **Cons**: Not real-time, requires cleanup
-
-## Implementation Details
-
-### Architecture
-1. **Primary**: WebRTC P2P via Trystero
-2. **Fallback**: Cloud storage upload after 10-second timeout
-3. **Cleanup**: Automatic file deletion after 24 hours
-
-### Supported Providers
-- **Supabase** (recommended for simplicity)
-- **AWS S3** (with presigned URLs)
-- **Google Cloud Storage**
-- **Azure Blob Storage**
-
-### Configuration
-```typescript
-const cloudConfig: CloudStorageConfig = {
-  provider: 'supabase',
-  bucketName: 'your-bucket-name',
-  region: 'us-east-1',
-  apiKey: 'your-api-key' // if needed
-};
+Anyone   →  GET /api/download/FILE?token=...        →  Pages Function  →  R2 Bucket  → file stream
 ```
 
-## Cost Analysis Examples
-
-### 100MB File Transfer
-- **TURN**: ~$0.01-0.05
-- **Cloud Storage**: ~$0.005-0.015
-
-### 1GB File Transfer (10 users)
-- **TURN**: ~$1.00-5.00 (relayed each time)
-- **Cloud Storage**: ~$0.05-0.15 (one upload, multiple downloads)
-
-### Heavy Usage (100GB/month)
-- **TURN**: ~$10-50/month
-- **Cloud Storage**: ~$2-7/month + storage costs
+- **No R2 credentials in the browser** — the Pages Function holds them server-side
+- **R2 egress through Workers is FREE** — no bandwidth charges for downloads
+- **HMAC-signed download URLs** — tamper-proof, auto-expire after 7 days
 
 ## Setup Instructions
 
-### Supabase (Recommended)
-1. Create Supabase project
-2. Enable Storage API
-3. Create bucket for file uploads
-4. Add RLS policies for uploads
-5. Configure API keys
+### 1. Create an R2 Bucket
+1. Go to [Cloudflare Dashboard → R2](https://dash.cloudflare.com/?to=/:account/r2)
+2. Click **Create Bucket**, name it `zavu-uploads`
+3. Add a lifecycle rule: **Delete objects after 7 days**
 
-### AWS S3
-1. Create S3 bucket
-2. Set up CORS policy
-3. Create IAM user with upload permissions
-4. Implement presigned URL endpoint
+### 2. Set Environment Variables
+In the Cloudflare Dashboard under your Pages project → **Settings → Environment Variables**, add:
 
-## Usage Flow
+| Variable | Value | Where |
+|----------|-------|-------|
+| `FIREBASE_PROJECT_ID` | Your Firebase project ID | Production + Preview |
+| `DOWNLOAD_SIGNING_SECRET` | Random 64-char hex string | Production + Preview |
 
-1. User selects files
-2. App attempts P2P connection
-3. If no connection after 10 seconds:
-   - Upload files to cloud storage
-   - Generate download link
-   - Update UI with cloud link
-4. Files automatically cleaned up after 24 hours
+Generate a signing secret:
+```bash
+openssl rand -hex 32
+```
 
-## Benefits
+The R2 bucket binding (`ZAVU_BUCKET`) is configured in `wrangler.toml` and picked up automatically.
 
-✅ **Cost Effective**: Cheaper than TURN for most use cases
-✅ **Reliable**: Files always accessible via direct link
-✅ **No Infrastructure**: Managed cloud services
-✅ **Automatic Cleanup**: Prevents storage bloat
-✅ **User Friendly**: Clear fallback indication
+### 3. Deploy
+Just `git push` — Cloudflare Pages automatically detects the `functions/` directory and deploys the serverless functions alongside your static site.
 
-## Trade-offs
+### 4. Set Up R2 Lifecycle Rules (Important!)
+To auto-delete files after 7 days and prevent storage cost growth:
+1. Go to your R2 bucket → **Settings → Object lifecycle rules**
+2. Add a rule: **Delete objects after 7 days**
 
-❌ **Not Real-time**: Upload takes time vs instant relay
-❌ **Storage Required**: Temporary files need management
-❌ **Complexity**: Additional integration work
+## Files
 
-## Recommendation
+| File | Purpose |
+|------|---------|
+| `functions/_middleware.ts` | CORS handling for API routes |
+| `functions/api/_auth.ts` | Firebase JWT verification + HMAC token signing |
+| `functions/api/upload.ts` | `POST /api/upload` — authenticated file upload to R2 |
+| `functions/api/download/[id].ts` | `GET /api/download/:id` — signed file download from R2 |
+| `src/cloud-storage.ts` | Frontend client — calls `/api/upload` with Firebase JWT |
+| `wrangler.toml` | R2 bucket binding configuration |
 
-**Use cloud storage fallback if:**
-- You transfer files larger than 50MB
-- You have multiple recipients per file
-- You want predictable costs
-- Real-time transfer isn't critical
+## Security
 
-**Keep TURN if:**
-- You need instant transfer
-- Files are small (<10MB)
-- You have minimal usage
-- Real-time is essential
+- ✅ R2 credentials never leave the server
+- ✅ Firebase JWT verified on every upload
+- ✅ Pro status checked server-side via JWT custom claims
+- ✅ Download URLs are HMAC-signed with constant-time comparison
+- ✅ Download links auto-expire after 7 days
+- ✅ Files auto-deleted via R2 lifecycle rules
+
+## Cost Estimate
+
+| Usage | Storage | Egress | Workers | Total/month |
+|-------|---------|--------|---------|-------------|
+| 10 GB, 50 downloads | ~$0.15 | $0 (free) | $0 (free tier) | ~$0.15 |
+| 100 GB, 500 downloads | ~$1.50 | $0 (free) | $0 (free tier) | ~$1.50 |
+| 1 TB, 5K downloads | ~$15.00 | $0 (free) | ~$2.50 | ~$17.50 |
+
+*R2 egress through Workers is completely free. Worker invocations: 100K/day free.*

@@ -108,6 +108,13 @@ export class FileReceiver {
   }
 
   /**
+   * Update the IV for the current file (AES-GCM requires unique IV per encryption)
+   */
+  updateIV(base64IV: string) {
+    this.encryptionIV = FileEncryption.base64ToIV(base64IV);
+  }
+
+  /**
    * Get file metadata
    */
   getMetadata() {
