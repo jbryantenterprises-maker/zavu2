@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zavu • P2P WeTransfer (no servers, no storage)</title>
+    
+    <!-- SEO and Social Sharing Meta Tags -->
+    <meta name="description" content="Send huge files directly browser-to-browser. No central storage, purely P2P.">
+    <meta property="og:title" content="Zavu • P2P File Transfer">
+    <meta property="og:description" content="Send huge files directly browser-to-browser. No central storage, purely P2P.">
+    <meta property="og:type" content="website">
+    
+    <!-- Inline Emoji Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⇄</text></svg>">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+</head>
+
+<body class="bg-zinc-950 text-white min-h-screen">
+    <!-- HEADER -->
+    <nav class="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-50">
+        <div class="max-w-screen-xl mx-auto px-6 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-x-3">
+                <div
+                    class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-black font-bold text-2xl rotate-12">
+                    ⇄</div>
+                <h1 class="logo-font text-3xl tracking-tighter">Zavu</h1>
+            </div>
+            <div class="flex items-center gap-x-8 text-sm font-medium">
+                <a href="#" onclick="showHowItWorks()" class="hover:text-emerald-400 transition-colors">How it works</a>
+                <a href="#" onclick="copyCodeToClipboard()"
+                    class="hover:text-emerald-400 transition-colors flex items-center gap-x-1">
+                    <span class="text-emerald-400">★</span>
+                    <span>Zero storage • Pure P2P</span>
+                </a>
+                <div
+                    class="flex items-center gap-x-2 bg-zinc-900 text-emerald-400 text-xs px-4 py-2 rounded-3xl border border-emerald-400/30">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    LIVE P2P
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-screen-xl mx-auto px-6 py-12">
+        <!-- HERO / LANDING -->
+        <div id="landing-screen" class="text-center mb-16">
+            <div
+                class="inline-flex items-center gap-x-2 bg-zinc-900 border border-emerald-400/30 text-emerald-400 text-sm px-6 py-3 rounded-3xl mb-6">
+                <span class="relative flex h-3 w-3">
+                    <span
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-400"></span>
+                </span>
+                WeTransfer clone — but peer-to-peer. No cloud. No traces.
+            </div>
+
+            <h2 class="text-6xl font-semibold tracking-tighter leading-none mb-6 logo-font">
+                Send huge files.<br>
+                <span class="text-emerald-400">Directly.</span> No servers.
+            </h2>
+            <p class="text-xl text-zinc-400 max-w-lg mx-auto mb-10">
+                Drag &amp; drop → get a magic link → email it.<br>
+                Your file never touches any server. Pure browser-to-browser WebRTC.
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button onclick="startSending()"
+                    class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xl px-10 py-6 rounded-3xl flex items-center gap-x-3 transition-all active:scale-95">
+                    <span>📤</span>
+                    SEND FILES (I'm the sender)
+                </button>
+
+                <div class="text-zinc-500 text-sm font-medium">or</div>
+
+                <button onclick="pasteLink()"
+                    class="border border-zinc-400 hover:border-white font-medium text-xl px-10 py-6 rounded-3xl flex items-center gap-x-3 transition-all">
+                    <span>📥</span>
+                    I have a link (receiver)
+                </button>
+            </div>
+
+            <div class="mt-16 grid grid-cols-3 gap-6 max-w-2xl mx-auto text-left text-sm">
+                <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
+                    <div class="text-emerald-400 text-2xl mb-2">🔒</div>
+                    <p class="font-medium">End-to-end encrypted by WebRTC</p>
+                    <p class="text-zinc-400 text-xs mt-1">DTLS + no central storage = truly private</p>
+                </div>
+                <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
+                    <div class="text-emerald-400 text-2xl mb-2">⚡</div>
+                    <p class="font-medium">Live &amp; direct</p>
+                    <p class="text-zinc-400 text-xs mt-1">Sender must keep tab open (like a walkie-talkie)</p>
+                </div>
+                <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
+                    <div class="text-emerald-400 text-2xl mb-2">📧</div>
+                    <p class="font-medium">Email the link instantly</p>
+                    <p class="text-zinc-400 text-xs mt-1">Opens your email client — no server involved</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SENDER SCREEN -->
+        <div id="sender-screen" class="hidden">
+            <div class="flex justify-between items-start mb-8">
+                <div>
+                    <h2 class="text-4xl font-semibold tracking-tighter">Send files</h2>
+                    <p class="text-emerald-400 text-lg">Your browser is now the server</p>
+                </div>
+                <button onclick="cancelTransfer()"
+                    class="text-zinc-400 hover:text-white flex items-center gap-x-2 text-sm font-medium">
+                    ← Back
+                </button>
+            </div>
+
+            <!-- Drag & Drop -->
+            <div id="drop-zone" ondrop="handleDrop(event)" ondragover="handleDragOver(event)"
+                ondragleave="handleDragLeave(event)"
+                class="border-4 border-dashed border-zinc-700 hover:border-emerald-400 rounded-3xl h-80 flex flex-col items-center justify-center text-center transition-colors cursor-pointer mb-8">
+                <div id="drop-content">
+                    <div class="text-7xl mb-6">📤</div>
+                    <p class="text-2xl font-medium mb-2">Drop files here</p>
+                    <p class="text-zinc-400">or</p>
+                    <button onclick="document.getElementById('file-input').click()"
+                        class="mt-6 bg-white text-black px-8 py-4 rounded-2xl font-semibold flex items-center gap-x-2 mx-auto hover:bg-emerald-400 hover:text-black">
+                        <span>Select from computer</span>
+                        <span class="text-xl">↑</span>
+                    </button>
+                    <input type="file" id="file-input" class="hidden" multiple onchange="handleFileSelect(event)">
+                    <p class="text-xs text-zinc-500 mt-8">Max ~4 GB (browser memory limit)</p>
+                </div>
+            </div>
+
+            <!-- File preview -->
+            <div id="file-preview" class="hidden bg-zinc-900 rounded-3xl p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-4">
+                        <div id="file-icon" class="text-5xl">📄</div>
+                        <div>
+                            <p id="file-name" class="font-medium text-lg"></p>
+                            <p id="file-size" class="text-zinc-400 text-sm"></p>
+                        </div>
+                    </div>
+                    <button onclick="clearFile()" class="text-red-400 text-sm font-medium">Remove</button>
+                </div>
+
+                <div class="mt-8 flex gap-x-4">
+                    <button onclick="createP2PLink()"
+                        class="flex-1 bg-emerald-500 text-black font-semibold py-6 rounded-3xl text-xl flex items-center justify-center gap-x-3 hover:scale-105 transition-transform">
+                        ✨ CREATE MAGIC LINK
+                        <span class="text-3xl">→</span>
+                    </button>
+                </div>
+                <p class="text-center text-xs text-zinc-400 mt-4">
+                    💡 Pro tip: For multiple files, zip them first (we keep it lightning fast)
+                </p>
+            </div>
+
+            <!-- Link screen -->
+            <div id="link-screen" class="hidden">
+                <div
+                    class="bg-gradient-to-br from-emerald-900/30 to-zinc-900 border border-emerald-400/30 rounded-3xl p-8">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-x-3">
+                            <span class="text-emerald-400 text-2xl">🔗</span>
+                            <h3 class="text-2xl font-semibold">Your live P2P link is ready</h3>
+                        </div>
+                        <div id="peer-status" class="text-emerald-400 flex items-center gap-x-2 text-sm">
+                            <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                            WAITING FOR RECEIVER
+                        </div>
+                    </div>
+
+                    <div class="bg-black/60 border border-emerald-400/30 rounded-2xl p-4 font-mono text-sm break-all mb-6"
+                        id="share-link-display">
+                        <!-- Filled by JS -->
+                    </div>
+
+                    <div class="flex flex-wrap gap-3">
+                        <button onclick="copyLink()"
+                            class="flex-1 bg-white text-black py-4 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
+                            📋 Copy link
+                        </button>
+                        <button onclick="emailLink()"
+                            class="flex-1 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
+                            ✉️ Email this link
+                        </button>
+                        <button onclick="showQR()"
+                            class="flex-1 bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl font-semibold flex items-center justify-center gap-x-2">
+                            📱 Show QR code
+                        </button>
+                    </div>
+
+                    <div id="sender-progress-area" class="hidden mt-8 pt-8 border-t border-zinc-700">
+                        <div class="text-sm mb-3 flex justify-between">
+                            <span>Transfer in progress</span>
+                            <span id="transfer-speed" class="text-emerald-400 font-medium">0 KB/s</span>
+                        </div>
+                        <div class="h-2 bg-zinc-800 rounded-3xl overflow-hidden">
+                            <div id="sender-progress-bar" class="h-2 bg-emerald-400 w-0 transition-all"></div>
+                        </div>
+                        <p id="sender-progress-text" class="text-xs text-zinc-400 mt-2 text-center">0% • Waiting for
+                            receiver to connect...</p>
+                    </div>
+
+                    <p class="text-center text-xs text-zinc-500 mt-8">
+                        ⚠️ Keep this tab open until the transfer finishes.<br>
+                        The file lives only in your browser memory.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECEIVER SCREEN -->
+        <div id="receiver-screen" class="hidden">
+            <div class="max-w-lg mx-auto bg-zinc-900 rounded-3xl p-8">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-semibold mb-2">Incoming P2P transfer</h2>
+                    <p class="text-emerald-400" id="receiver-sender-id"></p>
+                </div>
+
+                <div id="receiver-waiting" class="text-center py-12">
+                    <div
+                        class="animate-spin w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full mx-auto mb-6">
+                    </div>
+                    <p class="text-zinc-400">Connecting directly to sender…</p>
+                    <p class="text-xs text-zinc-500 mt-6">This is pure browser-to-browser magic.</p>
+                </div>
+
+                <div id="receiver-connected" class="hidden">
+                    <div class="bg-emerald-400/10 border border-emerald-400 text-emerald-400 rounded-2xl p-6 mb-8">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p id="incoming-file-name" class="font-medium"></p>
+                                <p id="incoming-file-size" class="text-sm"></p>
+                            </div>
+                            <button onclick="startDownload()"
+                                class="bg-emerald-400 text-black px-10 py-3 rounded-2xl font-semibold">Download
+                                now</button>
+                        </div>
+                    </div>
+
+                    <div id="receiver-progress-area" class="hidden">
+                        <div class="flex justify-between text-xs mb-2">
+                            <span>Receiving directly from sender</span>
+                            <span id="receiver-progress-text">0%</span>
+                        </div>
+                        <div class="h-2 bg-zinc-800 rounded-3xl">
+                            <div id="receiver-progress-bar" class="h-2 bg-emerald-400 w-0 transition-all"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div onclick="if(event.target.id === 'how-modal')hideHowItWorks()" id="how-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div onclick="event.stopImmediatePropagation()" class="max-w-2xl bg-zinc-900 rounded-3xl p-10">
+            <h2 class="text-4xl font-semibold mb-8">How Zavu works (the creative P2P twist)</h2>
+            <div class="space-y-8 text-zinc-300">
+                <div class="flex gap-6">
+                    <div class="text-5xl">1️⃣</div>
+                    <div>
+                        <p class="font-medium text-emerald-400">You become the temporary server</p>
+                        <p class="text-sm">When you create a link, your browser generates a P2P network ID and opens a WebRTC
+                            data channel. No file is uploaded anywhere.</p>
+                    </div>
+                </div>
+                <div class="flex gap-6">
+                    <div class="text-5xl">2️⃣</div>
+                    <div>
+                        <p class="font-medium text-emerald-400">Email the link (just like WeTransfer)</p>
+                        <p class="text-sm">We open your email client with the link pre-filled. Recipient clicks → their
+                            browser connects directly to yours via WebRTC.</p>
+                    </div>
+                </div>
+                <div class="flex gap-6">
+                    <div class="text-5xl">3️⃣</div>
+                    <div>
+                        <p class="font-medium text-emerald-400">Pure peer-to-peer transfer</p>
+                        <p class="text-sm">File is chunked (16 KB pieces) and streamed live over encrypted WebRTC. Zero
+                            central storage. When you close the tab — link dies instantly.</p>
+                    </div>
+                </div>
+                <div class="flex gap-6">
+                    <div class="text-5xl">4️⃣</div>
+                    <div>
+                        <p class="font-medium text-emerald-400">Creative extras we added</p>
+                        <ul class="text-sm list-disc pl-5 space-y-1">
+                            <li>Real-time speedometer</li>
+                            <li>Live progress on both sides</li>
+                            <li>QR code for phone-to-phone magic</li>
+                            <li>mailto: instant email composer</li>
+                            <li>Zero-knowledge design — even we (the creators) can't see your files</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <button onclick="hideHowItWorks()"
+                class="mt-10 w-full py-6 bg-white text-black rounded-3xl font-semibold text-xl">Got it, let's transfer
+                some bytes</button>
+        </div>
+    </div>
+
+    <!-- QR Modal -->
+    <div onclick="if(event.target.id === 'qr-modal')hideQR()" id="qr-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div onclick="event.stopImmediatePropagation()" class="bg-white text-black p-8 rounded-3xl text-center">
+            <p class="font-medium mb-4">Scan to receive on phone</p>
+            <canvas id="qr-canvas" class="mx-auto"></canvas>
+            <p class="text-xs text-zinc-500 mt-6">Works on any device — no app needed</p>
+        </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

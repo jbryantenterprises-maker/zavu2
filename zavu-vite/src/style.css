@@ -1,0 +1,26 @@
+/* Tailwind CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS Variables */
+:root {
+  --tw-color-primary: #00ff9d;
+}
+
+/* Base Styles */
+body {
+  font-family: 'Inter', system_ui, sans-serif;
+}
+
+.logo-font {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.drag-active {
+  animation: pulse 1.5s infinite;
+}
+
+.terminal {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
