@@ -8,6 +8,7 @@ import { FileEncryption } from './encryption.js';
 import { FileReceiver } from './file-receiver.js';
 import { AuthService } from './auth.js';
 import { PaymentService } from './payment.js';
+import { parseCloudDownloadFragment, downloadAndDecryptFile } from './cloud-download.js';
 
 /** Escape HTML special characters to prevent XSS when inserting user content */
 function escapeHtml(str: string): string {
@@ -32,6 +33,10 @@ export class ZavuApp {
   private fileReceiver: FileReceiver | null = null;
   private currentReceivingFileIndex: number = 0;
   private activeDownloadLink: string | null = null;
+  /** Tracks whether the current transfer is a cloud upload (for context-aware UI) */
+  private isCloudTransfer: boolean = false;
+  /** Stores cloud download URLs for proper copy/email */
+  private cloudDownloadUrls: string[] = [];
 
   constructor() {
     this.webrtc = new WebRTCManager();
@@ -45,7 +50,7 @@ export class ZavuApp {
 
   private init() {
     this.setupEventListeners();
-    this.checkForReceiverLink();
+    this.checkForCloudDownload() || this.checkForReceiverLink();
     this.checkResumeState();
     this.setupBeforeUnload();
 
@@ -110,6 +115,94 @@ export class ZavuApp {
         e.returnValue = 'Transfer in progress. Are you sure you want to leave?';
       }
     });
+  }
+
+  // ── Cloud Download Detection ─────────────────────────────────────────
+
+  /**
+   * Check if the current URL is a cloud download link (contains /api/download/ and
+   * has decryption params in the fragment). If so, show the cloud download UI.
+   * Returns true if a cloud download was detected.
+   */
+  private checkForCloudDownload(): boolean {
+    const url = window.location.href;
+    const hash = window.location.hash;
+
+    // Cloud download links look like: /api/download/...?token=...&expires=...#key=...&iv=...
+    if (!url.includes('/api/download/') || !hash) return false;
+
+    const params = parseCloudDownloadFragment(hash);
+    if (!params) return false;
+
+    // Show the cloud download UI
+    UIHelper.hideElement('landing-screen');
+    UIHelper.showElement('receiver-screen');
+
+    if (params.isPasswordProtected) {
+      this.showPasswordPromptForDownload(url, params);
+    } else {
+      this.startCloudDownload(url, params);
+    }
+
+    return true;
+  }
+
+  private showPasswordPromptForDownload(url: string, params: ReturnType<typeof parseCloudDownloadFragment>) {
+    if (!params) return;
+
+    UIHelper.hideElement('receiver-waiting');
+    UIHelper.showElement('receiver-connected');
+    UIHelper.updateElementText('incoming-file-name', '🔐 This file is password protected');
+    UIHelper.updateElementText('incoming-file-size', 'Enter the password to decrypt and download');
+
+    // Repurpose the download button to prompt for password
+    const downloadBtn = document.querySelector('#receiver-connected button') as HTMLElement;
+    if (downloadBtn) {
+      downloadBtn.textContent = 'Enter Password & Download';
+      downloadBtn.onclick = () => {
+        const password = prompt('Enter the password for this file:');
+        if (password) {
+          downloadBtn.style.display = 'none';
+          this.startCloudDownload(url, params, password);
+        }
+      };
+    }
+  }
+
+  private async startCloudDownload(
+    url: string,
+    params: ReturnType<typeof parseCloudDownloadFragment>,
+    password?: string
+  ) {
+    if (!params) return;
+
+    UIHelper.hideElement('receiver-waiting');
+    UIHelper.hideElement('receiver-connected');
+    UIHelper.showElement('receiver-progress-area');
+    UIHelper.updateElementText('receiver-progress-text', 'Downloading and decrypting…');
+
+    const result = await downloadAndDecryptFile(
+      url,
+      params,
+      password,
+      (progress) => {
+        UIHelper.setProgressBar('receiver-progress-bar', progress);
+        if (progress < 70) {
+          UIHelper.updateElementText('receiver-progress-text', `Downloading… ${progress}%`);
+        } else if (progress < 95) {
+          UIHelper.updateElementText('receiver-progress-text', 'Decrypting file…');
+        } else {
+          UIHelper.updateElementText('receiver-progress-text', '✅ File decrypted and downloaded!');
+        }
+      }
+    );
+
+    if (result.success) {
+      UIHelper.updateElementText('receiver-progress-text', '✅ File decrypted and downloaded!');
+      UIHelper.confettiBurst();
+    } else {
+      UIHelper.updateElementText('receiver-progress-text', `❌ ${result.error}`);
+    }
   }
 
   // Screen Management
@@ -216,7 +309,16 @@ export class ZavuApp {
         alert('You need a Pro account to use cloud uploads.');
         return;
       }
-      return this.uploadDirectToCloud(files);
+
+      // Check if password protection is enabled
+      const isPasswordProtected = (document.getElementById('password-protect-checkbox') as HTMLInputElement)?.checked;
+      let password: string | undefined;
+      if (isPasswordProtected) {
+        password = prompt('Set a password for this file transfer.\nRecipient will need this password to download:') || undefined;
+        if (!password) return; // User cancelled
+      }
+
+      return this.uploadDirectToCloud(files, password);
     }
 
     UIHelper.hideElement('file-preview');
@@ -229,6 +331,8 @@ export class ZavuApp {
     const roomId = existingId || crypto.randomUUID().replace(/-/g, '').substring(0, 12);
     
     this.webrtc.createRoom(roomId);
+    this.isCloudTransfer = false;
+    this.cloudDownloadUrls = [];
 
     setTimeout(async () => {
       const totalSize = this.fileHandler.getTotalSize();
@@ -256,12 +360,30 @@ export class ZavuApp {
         </div>
       `);
 
+      // P2P-specific UI text
+      this.updateLinkScreenText(false);
       UIHelper.showElement('link-screen');
 
       console.log('%c✅ Zavu created — ID: ' + roomId, 'color:#00ff9d; font-family:monospace');
 
       this.setupSenderListeners(fileMetas, totalSize);
     }, 100);
+  }
+
+  /**
+   * Update the link screen header, status, and warning text based on transfer type.
+   */
+  private updateLinkScreenText(isCloud: boolean) {
+    const titleEl = document.getElementById('link-screen-title');
+    const warningEl = document.getElementById('link-screen-warning');
+
+    if (isCloud) {
+      if (titleEl) titleEl.textContent = 'Your cloud download link is ready';
+      if (warningEl) warningEl.innerHTML = '☁️ File uploaded to encrypted cloud storage.<br>This link is valid for 7 days. You can close this tab.';
+    } else {
+      if (titleEl) titleEl.textContent = 'Your live P2P link is ready';
+      if (warningEl) warningEl.innerHTML = '⚠️ Keep this tab open until the transfer finishes.<br>The file lives only in your browser memory.';
+    }
   }
 
   private setupSenderListeners(fileMetas: FileMetadata[], totalSize: number) {
@@ -427,10 +549,16 @@ export class ZavuApp {
   }
 
   private async fallbackToCloudStorage(fileMetas: FileMetadata[]) {
+    this.isCloudTransfer = true;
+    this.cloudDownloadUrls = [];
+    this.updateLinkScreenText(true);
+
     UIHelper.updateElement('peer-status', '<span class="text-yellow-500">⚡ UPLOADING TO CLOUD</span>');
-    UIHelper.updateElement('sender-progress-text', '<span class="text-yellow-500">P2P failed, uploading to cloud storage...</span>');
+    UIHelper.updateElement('sender-progress-text', '<span class="text-yellow-500">P2P failed, uploading to encrypted cloud storage...</span>');
     
     const files = this.fileHandler.getSelectedFiles();
+    const uploadedLinks: string[] = [];
+    const uploadedFileIds: string[] = [];
     
     try {
       for (let i = 0; i < files.length; i++) {
@@ -438,34 +566,41 @@ export class ZavuApp {
         const metadata = fileMetas[i];
         
         UIHelper.updateElement('sender-progress-text', `
-          Uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
-          <span class="text-xs text-zinc-500">Fallback to cloud storage</span>
+          Encrypting and uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
+          <span class="text-xs text-zinc-500">Fallback to encrypted cloud storage</span>
         `);
         
         const result = await this.cloudStorage.uploadFile(file, metadata);
         
         if (result.success && result.downloadUrl) {
-          // Update UI with cloud download link
-          UIHelper.updateElement('share-link-display', `
-            <div class="flex items-center justify-between">
-              <span class="text-emerald-400 font-medium">${escapeHtml(result.downloadUrl!)}</span>
-            </div>
-          `);
+          uploadedLinks.push(result.downloadUrl);
+          if (result.fileId) uploadedFileIds.push(result.fileId);
           
-          UIHelper.updateElement('sender-progress-text', `
-            ✅ Uploaded to cloud! <br>
-            <span class="text-xs">Share the link above for download.</span>
-          `);
-          
-          // Store for cleanup
-          localStorage.setItem('zavuCloudFiles', JSON.stringify({
-            fileIds: [result.fileId],
-            uploadTime: Date.now()
-          }));
+          const progress = Math.round(((i + 1) / files.length) * 100);
+          UIHelper.showElement('sender-progress-area');
+          UIHelper.setProgressBar('sender-progress-bar', progress);
         } else {
           throw new Error(result.error || 'Upload failed');
         }
       }
+
+      // Display ALL links (fix for issue #3)
+      this.cloudDownloadUrls = uploadedLinks;
+      const linksHtml = uploadedLinks
+        .map(url => `<div class="mb-2"><span class="text-emerald-400 font-medium break-all text-xs lg:text-sm">${escapeHtml(url)}</span></div>`)
+        .join('');
+      UIHelper.updateElement('share-link-display', linksHtml);
+      
+      UIHelper.updateElement('sender-progress-text', `
+        ✅ Uploaded to encrypted cloud! <br>
+        <span class="text-xs">Share the link${uploadedLinks.length > 1 ? 's' : ''} above (Valid for 7 days).</span>
+      `);
+      
+      // Store ALL file IDs for cleanup (fix for issue #4)
+      localStorage.setItem('zavuCloudFiles', JSON.stringify({
+        fileIds: uploadedFileIds,
+        uploadTime: Date.now()
+      }));
     } catch (error) {
       console.error('Cloud storage fallback failed:', error);
       UIHelper.updateElement('sender-progress-text', `
@@ -475,13 +610,17 @@ export class ZavuApp {
     }
   }
 
-  private async uploadDirectToCloud(files: File[]) {
+  private async uploadDirectToCloud(files: File[], password?: string) {
+    this.isCloudTransfer = true;
+    this.cloudDownloadUrls = [];
+
     UIHelper.hideElement('file-preview');
     UIHelper.hideElement('drop-zone');
     
     UIHelper.showElement('link-screen');
-    UIHelper.updateElement('peer-status', '<span class="text-emerald-400">⚡ UPLOADING TO CLOUD (7-DAY LINK)</span>');
-    UIHelper.updateElementText('share-link-display', 'Uploading...');
+    this.updateLinkScreenText(true);
+    UIHelper.updateElement('peer-status', '<span class="text-emerald-400">⚡ ENCRYPTING & UPLOADING TO CLOUD</span>');
+    UIHelper.updateElementText('share-link-display', 'Encrypting and uploading...');
     
     UIHelper.showElement('sender-progress-area');
     UIHelper.setProgressBar('sender-progress-bar', 10); // Just a visual start
@@ -496,11 +635,11 @@ export class ZavuApp {
         const metadata = fileMetas[i];
         
         UIHelper.updateElement('sender-progress-text', `
-          Uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
-          <span class="text-xs text-emerald-400 font-medium">Creating 7-day permanent link</span>
+          Encrypting & uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
+          <span class="text-xs text-emerald-400 font-medium">Creating encrypted 7-day link${password ? ' (password protected)' : ''}</span>
         `);
         
-        const result = await this.cloudStorage.uploadFile(file, metadata);
+        const result = await this.cloudStorage.uploadFile(file, metadata, password);
         
         if (result.success && result.downloadUrl) {
           uploadedLinks.push(result.downloadUrl);
@@ -513,6 +652,9 @@ export class ZavuApp {
         }
       }
       
+      // Store URLs for copy/email (fix for issue #9)
+      this.cloudDownloadUrls = uploadedLinks;
+
       // Display all links
       const linksHtml = uploadedLinks
         .map(url => `<div class="mb-2"><span class="text-emerald-400 font-medium break-all text-xs lg:text-sm">${escapeHtml(url)}</span></div>`)
@@ -521,7 +663,7 @@ export class ZavuApp {
 
       UIHelper.updateElement('sender-progress-text', `
         ✅ Upload complete! 🎉<br>
-        <span class="text-xs">Share the link${uploadedLinks.length > 1 ? 's' : ''} above (Valid for 7 days).</span>
+        <span class="text-xs">Share the link${uploadedLinks.length > 1 ? 's' : ''} above (Valid for 7 days).${password ? ' 🔐 Password protected.' : ''}</span>
       `);
       UIHelper.confettiBurst();
       
@@ -708,10 +850,16 @@ export class ZavuApp {
 
 
 
-  // Link sharing methods
+  // Link sharing methods — context-aware for P2P vs cloud
   async copyLink() {
     try {
-      await UIHelper.copyLink('share-link-display');
+      if (this.isCloudTransfer && this.cloudDownloadUrls.length > 0) {
+        // Copy all cloud download URLs, one per line
+        const text = this.cloudDownloadUrls.join('\n');
+        await UIHelper.copyToClipboard(text);
+      } else {
+        await UIHelper.copyLink('share-link-display');
+      }
       
       // Look for the copy button specifically
       const buttons = document.querySelectorAll('button');
@@ -728,14 +876,25 @@ export class ZavuApp {
   }
 
   emailLink() {
-    const linkElement = document.getElementById('share-link-display');
-    const link = linkElement?.textContent?.trim() || '';
-    UIHelper.emailLink(link);
+    if (this.isCloudTransfer && this.cloudDownloadUrls.length > 0) {
+      UIHelper.emailCloudLink(this.cloudDownloadUrls);
+    } else {
+      const linkElement = document.getElementById('share-link-display');
+      const link = linkElement?.textContent?.trim() || '';
+      UIHelper.emailLink(link);
+    }
   }
 
   async showQR() {
-    const linkElement = document.getElementById('share-link-display');
-    const link = linkElement?.textContent?.trim() || '';
+    // For QR, use the first link (QR can only encode one)
+    let link: string;
+    if (this.isCloudTransfer && this.cloudDownloadUrls.length > 0) {
+      link = this.cloudDownloadUrls[0];
+    } else {
+      const linkElement = document.getElementById('share-link-display');
+      link = linkElement?.textContent?.trim() || '';
+    }
+
     UIHelper.showElement('qr-modal');
     
     try {

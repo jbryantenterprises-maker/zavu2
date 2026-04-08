@@ -210,4 +210,104 @@ export class FileEncryption {
       iv
     };
   }
+
+  // ── Password-Based Key Wrapping (PBKDF2) ─────────────────────────────
+
+  /**
+   * Derive an AES-KW key from a user-supplied password via PBKDF2.
+   * Returns the derived key and the random salt used (salt must be stored/sent alongside).
+   */
+  static async deriveKeyFromPassword(
+    password: string,
+    salt?: Uint8Array
+  ): Promise<{ derivedKey: CryptoKey; salt: Uint8Array }> {
+    const actualSalt = salt || window.crypto.getRandomValues(new Uint8Array(16));
+
+    const passwordKey = await window.crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(password),
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    );
+
+    const derivedKey = await window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: new Uint8Array(actualSalt.buffer as ArrayBuffer),
+        iterations: 310_000, // OWASP recommended minimum for PBKDF2-SHA256
+        hash: 'SHA-256',
+      },
+      passwordKey,
+      { name: this.ALGORITHM, length: this.KEY_LENGTH },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    return { derivedKey, salt: actualSalt };
+  }
+
+  /**
+   * Encrypt (wrap) an AES-GCM file key + IV using a password.
+   * Returns the encrypted bundle and salt as base64 strings.
+   * The bundle format is: AES-GCM ciphertext of JSON { key: base64, iv: base64 }
+   */
+  static async wrapKeyWithPassword(
+    fileKey: CryptoKey,
+    fileIV: Uint8Array,
+    password: string
+  ): Promise<{ wrappedBundle: string; salt: string; wrapIV: string }> {
+    const { derivedKey, salt } = await this.deriveKeyFromPassword(password);
+    const wrapIV = this.generateIV();
+
+    // Serialize the file key + IV into a JSON payload
+    const keyBase64 = await this.keyToBase64(fileKey);
+    const ivBase64 = this.ivToBase64(fileIV);
+    const payload = JSON.stringify({ key: keyBase64, iv: ivBase64 });
+
+    const encrypted = await window.crypto.subtle.encrypt(
+      { name: this.ALGORITHM, iv: new Uint8Array(wrapIV.buffer as ArrayBuffer) },
+      derivedKey,
+      new TextEncoder().encode(payload)
+    );
+
+    return {
+      wrappedBundle: this.arrayBufferToBase64(encrypted),
+      salt: this.arrayBufferToBase64(salt.buffer as ArrayBuffer),
+      wrapIV: this.ivToBase64(wrapIV),
+    };
+  }
+
+  /**
+   * Decrypt (unwrap) an AES-GCM file key + IV using a password.
+   * Returns null if the password is wrong.
+   */
+  static async unwrapKeyWithPassword(
+    wrappedBundle: string,
+    salt: string,
+    wrapIV: string,
+    password: string
+  ): Promise<{ key: CryptoKey; iv: Uint8Array } | null> {
+    try {
+      const saltBytes = new Uint8Array(this.base64ToArrayBuffer(salt));
+      const { derivedKey } = await this.deriveKeyFromPassword(password, saltBytes);
+      const wrapIVBytes = this.base64ToIV(wrapIV);
+
+      const decrypted = await window.crypto.subtle.decrypt(
+        { name: this.ALGORITHM, iv: new Uint8Array(wrapIVBytes.buffer as ArrayBuffer) },
+        derivedKey,
+        this.base64ToArrayBuffer(wrappedBundle)
+      );
+
+      const payload = JSON.parse(new TextDecoder().decode(decrypted));
+      const key = await this.base64ToKey(payload.key);
+      const iv = this.base64ToIV(payload.iv);
+
+      return { key, iv };
+    } catch {
+      // Wrong password or corrupted data
+      return null;
+    }
+  }
 }
+

@@ -54,6 +54,14 @@ export class UIHelper {
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
+  static emailCloudLink(links: string[]): void {
+    const subject = encodeURIComponent("I sent you a file via Zavu");
+    const linkList = links.join('\n');
+    const plural = links.length > 1 ? 's are' : ' is';
+    const body = encodeURIComponent(`Hey!\n\nI uploaded a file for you. Use the link${links.length > 1 ? 's' : ''} below to download:\n\n${linkList}\n\nThe link${plural} valid for 7 days. Files are end-to-end encrypted — no one else can access them.\n\nEnjoy!`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  }
+
   static showQRCode(canvasId: string, link: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;

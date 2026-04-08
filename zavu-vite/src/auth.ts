@@ -46,10 +46,25 @@ export class AuthService {
     
     onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // TODO: In a production app, verify `isPro` status by querying your Firestore users collection
-        // or checking for custom claims populated by your Lemon Squeezy webhook.
-        // For now, we simulate a check:
-        const isPro = localStorage.getItem(`zavu_pro_${firebaseUser.uid}`) === "true";
+        // Use localStorage as a fast cache for initial render, then verify
+        // authoritatively via Firebase custom claims from the JWT.
+        // The Lemon Squeezy webhook must set custom claims (e.g. { pro: true })
+        // on the Firebase user via the Admin SDK after purchase.
+        let isPro = localStorage.getItem(`zavu_pro_${firebaseUser.uid}`) === "true";
+        
+        try {
+          const tokenResult = await firebaseUser.getIdTokenResult();
+          const claims = tokenResult.claims;
+          isPro = !!(
+            claims.pro ||
+            claims.stripeRole === 'pro' ||
+            claims.plan === 'pro'
+          );
+          // Update cache to match authoritative value
+          localStorage.setItem(`zavu_pro_${firebaseUser.uid}`, isPro ? "true" : "false");
+        } catch (e) {
+          console.warn("Failed to fetch token claims, using cached Pro status:", e);
+        }
         
         this.user = {
           uid: firebaseUser.uid,

@@ -167,20 +167,21 @@
                 <!-- PRO FEATURES AREA -->
                 <div class="mt-6 flex flex-col gap-4 bg-zinc-950 p-5 rounded-2xl border border-zinc-800">
                     <p class="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-1">Transfer Options</p>
-                    <label class="flex items-center gap-x-3 cursor-pointer group" title="Upload directly to high-speed R2 cloud for a 7-day permanent link">
+                    <label class="flex items-center gap-x-3 cursor-pointer group" title="Upload directly to encrypted R2 cloud for a 7-day permanent link">
                         <input type="checkbox" id="cloud-upload-checkbox" onchange="handleProToggle(this, 'cloud')" class="w-5 h-5 rounded border-zinc-600 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 accent-emerald-500">
                         <span class="text-sm group-hover:text-emerald-400 transition-colors flex items-center">
-                            Create 7-day permanent link
+                            Create 7-day encrypted cloud link
                             <span class="text-[0.6rem] font-bold bg-zinc-800 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded ml-2 uppercase tracking-wide">Pro</span>
                         </span>
                     </label>
-                    <label class="flex items-center gap-x-3 cursor-pointer group">
+                    <label class="flex items-center gap-x-3 cursor-pointer group" title="Recipient must enter a password to decrypt and download">
                         <input type="checkbox" id="password-protect-checkbox" onchange="handleProToggle(this, 'password')" class="w-5 h-5 rounded border-zinc-600 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 accent-emerald-500">
                         <span class="text-sm group-hover:text-emerald-400 transition-colors flex items-center">
-                            Password protect transfer
+                            Password protect download
                             <span class="text-[0.6rem] font-bold bg-zinc-800 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded ml-2 uppercase tracking-wide">Pro</span>
                         </span>
                     </label>
+                    <p class="text-xs text-zinc-600">Password protection is available with cloud links. Files are encrypted client-side before upload.</p>
                 </div>
 
                 <p class="text-center text-xs text-zinc-400 mt-6">
@@ -195,7 +196,7 @@
                     <div class="flex items-center justify-between mb-6">
                         <div class="flex items-center gap-x-3">
                             <span class="text-emerald-400 text-2xl">🔗</span>
-                            <h3 class="text-2xl font-semibold">Your live P2P link is ready</h3>
+                            <h3 id="link-screen-title" class="text-2xl font-semibold">Your live P2P link is ready</h3>
                         </div>
                         <div id="peer-status" class="text-emerald-400 flex items-center gap-x-2 text-sm">
                             <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
@@ -235,7 +236,7 @@
                             receiver to connect...</p>
                     </div>
 
-                    <p class="text-center text-xs text-zinc-500 mt-8">
+                    <p id="link-screen-warning" class="text-center text-xs text-zinc-500 mt-8">
                         ⚠️ Keep this tab open until the transfer finishes.<br>
                         The file lives only in your browser memory.
                     </p>
@@ -312,14 +313,23 @@
                     <div class="text-5xl">3️⃣</div>
                     <div>
                         <p class="font-medium text-emerald-400">Pure peer-to-peer transfer</p>
-                        <p class="text-sm">File is chunked (16 KB pieces) and streamed live over encrypted WebRTC. Zero
+                        <p class="text-sm">File is chunked and streamed live over encrypted WebRTC. Zero
                             central storage. When you close the tab — link dies instantly.</p>
                     </div>
                 </div>
                 <div class="flex gap-6">
                     <div class="text-5xl">4️⃣</div>
                     <div>
-                        <p class="font-medium text-emerald-400">Creative extras we added</p>
+                        <p class="font-medium text-emerald-400">Pro: Encrypted cloud links (7 days)</p>
+                        <p class="text-sm">Pro users can optionally upload files encrypted to our cloud for 7-day persistent links.
+                            Files are encrypted client-side before upload — even we can't see them.
+                            Optional password protection adds another layer.</p>
+                    </div>
+                </div>
+                <div class="flex gap-6">
+                    <div class="text-5xl">5️⃣</div>
+                    <div>
+                        <p class="font-medium text-emerald-400">Creative extras</p>
                         <ul class="text-sm list-disc pl-5 space-y-1">
                             <li>Real-time speedometer</li>
                             <li>Live progress on both sides</li>
