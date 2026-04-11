@@ -46,8 +46,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     return new Response('File not found', { status: 404 });
   }
 
-  // Extract the original filename from the R2 key (uid/uuid/filename.ext)
-  const fileName = fileId.split('/').pop() || 'download';
+  const expiresAtMetadata = Number.parseInt(object.customMetadata?.expiresAt || '', 10);
+  if (Number.isFinite(expiresAtMetadata) && expiresAtMetadata <= Date.now()) {
+    await env.ZAVU_BUCKET.delete(fileId);
+    return new Response('File not found', { status: 404 });
+  }
+
+  const fileName = object.customMetadata?.originalName || fileId.split('/').pop() || 'download';
   const safeName = encodeURIComponent(fileName).replace(/['()]/g, escape);
 
   // ── 4. Stream the file to the client ──────────────────────────────

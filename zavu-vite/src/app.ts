@@ -21,11 +21,11 @@ function escapeHtml(str: string): string {
 }
 
 export class ZavuApp {
+  private static readonly CLOUD_CLEANUP_STORAGE_KEY = 'zavuCloudFiles';
   private webrtc: WebRTCManager;
   private fileHandler: FileHandler;
   private cloudStorage: CloudStorageService;
   private encryptionKey: CryptoKey | null = null;
-  private encryptionIV: Uint8Array | null = null;
   private transferInProgress: boolean = false;
   private unackedChunks: number = 0;
   private readonly MAX_WINDOW: number = 32;
@@ -37,6 +37,8 @@ export class ZavuApp {
   private isCloudTransfer: boolean = false;
   /** Stores cloud download URLs for proper copy/email */
   private cloudDownloadUrls: string[] = [];
+  private cloudCleanupUserId: string | null = null;
+  private senderFlowToken = 0;
 
   constructor() {
     this.webrtc = new WebRTCManager();
@@ -51,13 +53,20 @@ export class ZavuApp {
   private init() {
     this.setupEventListeners();
     this.checkForCloudDownload() || this.checkForReceiverLink();
-    this.checkResumeState();
     this.setupBeforeUnload();
 
     // Auth & Payments
     AuthService.init();
     PaymentService.init();
-    AuthService.onAuthStateChanged((user) => this.updateAuthUI(user));
+    AuthService.onAuthStateChanged((user) => {
+      this.updateAuthUI(user);
+      if (user && user.uid !== this.cloudCleanupUserId) {
+        this.cloudCleanupUserId = user.uid;
+        void this.cleanupExpiredCloudFiles();
+      } else if (!user) {
+        this.cloudCleanupUserId = null;
+      }
+    });
   }
 
   private updateAuthUI(user: any) {
@@ -128,7 +137,7 @@ export class ZavuApp {
     const url = window.location.href;
     const hash = window.location.hash;
 
-    // Cloud download links look like: /api/download/...?token=...&expires=...#key=...&iv=...
+    // Cloud download links look like: /api/download/...?token=...&expires=...#key=...
     if (!url.includes('/api/download/') || !hash) return false;
 
     const params = parseCloudDownloadFragment(hash);
@@ -158,12 +167,13 @@ export class ZavuApp {
     // Repurpose the download button to prompt for password
     const downloadBtn = document.querySelector('#receiver-connected button') as HTMLElement;
     if (downloadBtn) {
+      downloadBtn.style.display = '';
       downloadBtn.textContent = 'Enter Password & Download';
       downloadBtn.onclick = () => {
         const password = prompt('Enter the password for this file:');
         if (password) {
           downloadBtn.style.display = 'none';
-          this.startCloudDownload(url, params, password);
+          void this.startCloudDownload(url, params, password);
         }
       };
     }
@@ -202,6 +212,14 @@ export class ZavuApp {
       UIHelper.confettiBurst();
     } else {
       UIHelper.updateElementText('receiver-progress-text', `❌ ${result.error}`);
+      if (params.isPasswordProtected) {
+        UIHelper.hideElement('receiver-progress-area');
+        UIHelper.showElement('receiver-connected');
+        const downloadBtn = document.querySelector('#receiver-connected button') as HTMLElement | null;
+        if (downloadBtn) {
+          downloadBtn.style.display = '';
+        }
+      }
     }
   }
 
@@ -225,8 +243,10 @@ export class ZavuApp {
         UIHelper.showElement('receiver-screen');
         UIHelper.updateElementText('receiver-sender-id', `Connecting to ${id.slice(0, 8)}…`);
         this.connectAsReceiver(id);
+      } else if (url.pathname.includes('/api/download/') && url.hash) {
+        window.location.href = link;
       } else {
-        alert("Invalid link. Make sure it contains ?id=...");
+        alert("Invalid link. Use a Zavu P2P link or a cloud download link.");
       }
     } catch (e) {
       alert("Not a valid URL");
@@ -325,30 +345,19 @@ export class ZavuApp {
     UIHelper.hideElement('drop-zone');
 
     // Generate encryption key for this transfer
+    this.senderFlowToken++;
     this.encryptionKey = await FileEncryption.generateKey();
-    this.encryptionIV = FileEncryption.generateIV();
-
     const roomId = existingId || crypto.randomUUID().replace(/-/g, '').substring(0, 12);
     
     this.webrtc.createRoom(roomId);
     this.isCloudTransfer = false;
     this.cloudDownloadUrls = [];
 
+    const flowToken = this.senderFlowToken;
     setTimeout(async () => {
+      if (flowToken !== this.senderFlowToken) return;
       const totalSize = this.fileHandler.getTotalSize();
       const fileMetas = this.fileHandler.getFileMetadata();
-
-      // Save state for resume functionality
-      const encryptionKeyBase64 = await FileEncryption.keyToBase64(this.encryptionKey!);
-      const encryptionIVBase64 = FileEncryption.ivToBase64(this.encryptionIV!);
-      
-      localStorage.setItem('zavuSenderState', JSON.stringify({
-        peerId: roomId,
-        files: fileMetas,
-        totalSize: totalSize,
-        encryptionKey: encryptionKeyBase64,
-        encryptionIV: encryptionIVBase64
-      }));
 
       // Build shareable link
       const baseUrl = window.location.origin + window.location.pathname;
@@ -366,7 +375,7 @@ export class ZavuApp {
 
       console.log('%c✅ Zavu created — ID: ' + roomId, 'color:#00ff9d; font-family:monospace');
 
-      this.setupSenderListeners(fileMetas, totalSize);
+      this.setupSenderListeners(fileMetas, totalSize, flowToken);
     }, 100);
   }
 
@@ -386,10 +395,11 @@ export class ZavuApp {
     }
   }
 
-  private setupSenderListeners(fileMetas: FileMetadata[], totalSize: number) {
+  private setupSenderListeners(fileMetas: FileMetadata[], totalSize: number, flowToken: number) {
     let connectionTimeout: NodeJS.Timeout;
     
     this.webrtc.onPeerJoin(async (peerId) => {
+      if (flowToken !== this.senderFlowToken || this.isCloudTransfer) return;
       clearTimeout(connectionTimeout);
       this.webrtc.setCurrentPeer(peerId);
       console.log('Receiver connected!', peerId);
@@ -399,18 +409,18 @@ export class ZavuApp {
         type: 'metadata',
         files: fileMetas,
         totalSize: totalSize,
-        encryptionKey: await FileEncryption.keyToBase64(this.encryptionKey!),
-        encryptionIV: FileEncryption.ivToBase64(this.encryptionIV!)
+        encryptionKey: await FileEncryption.keyToBase64(this.encryptionKey!)
       }, peerId);
     });
 
     // Set timeout for P2P connection
     connectionTimeout = setTimeout(() => {
+      if (flowToken !== this.senderFlowToken || this.isCloudTransfer) return;
       if (!this.webrtc.getCurrentPeer()) {
         const user = AuthService.getUser();
         if (user?.isPro && this.cloudStorage.isConfigured()) {
           console.log('P2P connection failed, falling back to cloud storage (Pro)');
-          this.fallbackToCloudStorage(fileMetas);
+          this.fallbackToCloudStorage(fileMetas, flowToken);
         } else {
           UIHelper.updateElement('peer-status', '<span class="text-yellow-400">⏳ Still waiting for receiver…</span>');
           console.log('P2P connection pending — no cloud fallback (free user or R2 not configured)');
@@ -419,6 +429,7 @@ export class ZavuApp {
     }, 10000); // 10 second timeout
 
     this.webrtc.onSignal((data: SignalData, peerId: string) => {
+      if (flowToken !== this.senderFlowToken || this.isCloudTransfer) return;
       if (data.type === 'start_download') {
         this.startMultiFileTransfer(peerId, data.fileIndex || 0, data.offset || 0);
       } else if ((data as any) === 'start_download') {
@@ -436,6 +447,7 @@ export class ZavuApp {
     });
 
     this.webrtc.onPeerLeave((peerId) => {
+      if (flowToken !== this.senderFlowToken) return;
       if (peerId === this.webrtc.getCurrentPeer()) {
         UIHelper.updateElement('peer-status', '<span class="text-red-500">❌ DISCONNECTED</span>');
         UIHelper.updateElement('sender-progress-text', '<span class="text-red-500">Error: Receiver disconnected mid-transfer.</span>');
@@ -473,41 +485,45 @@ export class ZavuApp {
       }
 
       const file = files[index];
-      const chunkSize = 64 * 1024;
       let currentFileOffset = offset;
       
-      // Read and encrypt the entire file with a FRESH IV per file (AES-GCM requires unique IVs)
-      const fileArrayBuffer = await file.arrayBuffer();
-      const perFileIV = FileEncryption.generateIV();
-      const encryptedResult = await FileEncryption.encryptFile(
-        fileArrayBuffer, 
-        this.encryptionKey!, 
-        perFileIV
-      );
-
       this.webrtc.sendSignalData({ 
         type: 'next_file', 
         index: index, 
         name: file.name, 
         size: file.size, 
-        mime: file.type || 'application/octet-stream',
-        encryptionIV: FileEncryption.ivToBase64(perFileIV)
+        mime: file.type || 'application/octet-stream'
       }, peerTarget);
+
+      const reader = file.stream().getReader();
       
-      const readNextChunk = () => {
+      const readNextChunk = async () => {
         if (this.unackedChunks >= this.MAX_WINDOW) {
           this.resumeReading = readNextChunk;
           return;
         }
 
-        const slice = encryptedResult.encryptedData.slice(currentFileOffset, currentFileOffset + chunkSize);
-        
-        this.webrtc.sendChunkData(slice, peerTarget);
+        const { done, value } = await reader.read();
+        if (done) {
+          const waitAcks = setInterval(() => {
+            if (this.unackedChunks === 0) {
+              clearInterval(waitAcks);
+              setTimeout(() => {
+                this.webrtc.sendSignalData({ type: 'file_end', index: index }, peerTarget);
+                sendFile(index + 1, 0);
+              }, 50);
+            }
+          }, 50);
+          return;
+        }
+
+        const encryptedChunk = await FileEncryption.encryptChunk(value, this.encryptionKey!);
+        this.webrtc.sendChunkData(FileEncryption.toArrayBuffer(encryptedChunk), peerTarget);
         this.unackedChunks++;
 
-        bytesSentSinceStart += slice.byteLength;
-        currentFileOffset += slice.byteLength;
-        globalOffset += slice.byteLength;
+        bytesSentSinceStart += value.byteLength;
+        currentFileOffset += value.byteLength;
+        globalOffset += value.byteLength;
         
         const progress = Math.min(Math.round((globalOffset / totalSize) * 100), 100);
         
@@ -526,20 +542,7 @@ export class ZavuApp {
           bytesSentSinceStart = 0;
         }
 
-        if (currentFileOffset < encryptedResult.encryptedData.byteLength) {
-          readNextChunk();
-        } else {
-          // Wait until ALL chunks have been acknowledged by the receiver
-          const waitAcks = setInterval(() => {
-            if (this.unackedChunks === 0) {
-              clearInterval(waitAcks);
-              setTimeout(() => {
-                this.webrtc.sendSignalData({ type: 'file_end', index: index }, peerTarget);
-                sendFile(index + 1, 0);
-              }, 50);
-            }
-          }, 50);
-        }
+        readNextChunk();
       };
       
       setTimeout(readNextChunk, 100);
@@ -548,7 +551,11 @@ export class ZavuApp {
     sendFile(startIndex, startOffset);
   }
 
-  private async fallbackToCloudStorage(fileMetas: FileMetadata[]) {
+  private async fallbackToCloudStorage(fileMetas: FileMetadata[], flowToken: number) {
+    if (flowToken !== this.senderFlowToken) return;
+    this.senderFlowToken++;
+    this.webrtc.leaveRoom();
+    this.webrtc.setCurrentPeer('');
     this.isCloudTransfer = true;
     this.cloudDownloadUrls = [];
     this.updateLinkScreenText(true);
@@ -559,6 +566,7 @@ export class ZavuApp {
     const files = this.fileHandler.getSelectedFiles();
     const uploadedLinks: string[] = [];
     const uploadedFileIds: string[] = [];
+    let latestExpiresAt = 0;
     
     try {
       for (let i = 0; i < files.length; i++) {
@@ -575,6 +583,7 @@ export class ZavuApp {
         if (result.success && result.downloadUrl) {
           uploadedLinks.push(result.downloadUrl);
           if (result.fileId) uploadedFileIds.push(result.fileId);
+          if (result.expiresAt) latestExpiresAt = Math.max(latestExpiresAt, result.expiresAt);
           
           const progress = Math.round(((i + 1) / files.length) * 100);
           UIHelper.showElement('sender-progress-area');
@@ -597,10 +606,7 @@ export class ZavuApp {
       `);
       
       // Store ALL file IDs for cleanup (fix for issue #4)
-      localStorage.setItem('zavuCloudFiles', JSON.stringify({
-        fileIds: uploadedFileIds,
-        uploadTime: Date.now()
-      }));
+      this.recordCloudUploads(uploadedFileIds, latestExpiresAt);
     } catch (error) {
       console.error('Cloud storage fallback failed:', error);
       UIHelper.updateElement('sender-progress-text', `
@@ -611,6 +617,9 @@ export class ZavuApp {
   }
 
   private async uploadDirectToCloud(files: File[], password?: string) {
+    this.senderFlowToken++;
+    this.webrtc.leaveRoom();
+    this.webrtc.setCurrentPeer('');
     this.isCloudTransfer = true;
     this.cloudDownloadUrls = [];
 
@@ -627,6 +636,7 @@ export class ZavuApp {
     
     const uploadedLinks: string[] = [];
     const uploadedFileIds: string[] = [];
+    let latestExpiresAt = 0;
     
     try {
       const fileMetas = this.fileHandler.getFileMetadata();
@@ -644,6 +654,7 @@ export class ZavuApp {
         if (result.success && result.downloadUrl) {
           uploadedLinks.push(result.downloadUrl);
           if (result.fileId) uploadedFileIds.push(result.fileId);
+          if (result.expiresAt) latestExpiresAt = Math.max(latestExpiresAt, result.expiresAt);
           
           const progress = Math.round(((i + 1) / files.length) * 100);
           UIHelper.setProgressBar('sender-progress-bar', progress);
@@ -667,10 +678,7 @@ export class ZavuApp {
       `);
       UIHelper.confettiBurst();
       
-      localStorage.setItem('zavuCloudFiles', JSON.stringify({
-        fileIds: uploadedFileIds,
-        uploadTime: Date.now()
-      }));
+      this.recordCloudUploads(uploadedFileIds, latestExpiresAt);
     } catch (error: any) {
       console.error('Cloud storage upload failed:', error);
       UIHelper.updateElement('sender-progress-text', `
@@ -684,8 +692,6 @@ export class ZavuApp {
   private connectAsReceiver(targetId: string) {
     this.webrtc.joinRoom(targetId);
     this.webrtc.setCurrentPeer(targetId);
-    
-    UIHelper.hideElement('receiver-waiting');
 
     this.setupReceiverListeners();
   }
@@ -753,10 +759,6 @@ export class ZavuApp {
         // Setup for next file
         this.currentReceivingFileIndex = data.index || 0;
         this.fileReceiver?.reset();
-        // Update per-file IV if provided (for AES-GCM security)
-        if (data.encryptionIV) {
-          this.fileReceiver?.updateIV(data.encryptionIV);
-        }
         UIHelper.updateElementText('receiver-progress-text', `Preparing file ${data.name}...`);
         UIHelper.setProgressBar('receiver-progress-bar', 0);
       } else if (data.type === 'file_end') {
@@ -775,14 +777,18 @@ export class ZavuApp {
       }
     });
 
-    this.webrtc.onChunk((chunk: ArrayBuffer, peerId: string) => {
+    this.webrtc.onChunk(async (chunk: ArrayBuffer, peerId: string) => {
       const metadata = this.fileReceiver?.getMetadata();
       const currentSize = metadata?.files?.[this.currentReceivingFileIndex]?.size || metadata?.totalSize || 1;
-      
-      this.fileReceiver?.handleChunk(chunk, currentSize);
-      
-      // Send ack to maintain backpressure
-      this.webrtc.sendSignalData({ type: 'ack_chunk' }, peerId);
+
+      try {
+        await this.fileReceiver?.handleChunk(chunk, currentSize);
+        // Send ack to maintain backpressure
+        this.webrtc.sendSignalData({ type: 'ack_chunk' }, peerId);
+      } catch (error) {
+        console.error('Receiver chunk error:', error);
+        UIHelper.updateElementText('receiver-progress-text', '❌ Error: Failed to decrypt transfer chunk.');
+      }
     });
 
     this.webrtc.onPeerLeave((peerId) => {
@@ -817,35 +823,55 @@ export class ZavuApp {
     }
   }
 
-  private checkResumeState() {
-    const stateJson = localStorage.getItem('zavuSenderState');
-    if (stateJson && !window.location.search.includes('?id=')) {
-      try {
-        const state = JSON.parse(stateJson);
-        const names = state.files.map((f: FileMetadata) => f.name).join(', ');
-        const resumeScreen = document.getElementById('resume-screen');
-        if (resumeScreen) {
-          UIHelper.updateElementText('resume-file-name', 
-            state.files.length > 1 ? 
-              `${state.files.length} files (${names.substring(0, 30)}...)` : 
-              state.files[0].name
-          );
-          UIHelper.hideElement('landing-screen');
-          UIHelper.showElement('resume-screen');
-        } else {
-          // If resume UI doesn't exist, just clear the stale state
-          localStorage.removeItem('zavuSenderState');
-        }
-      } catch(e) {
-        localStorage.removeItem('zavuSenderState');
-      }
+  cancelTransfer() {
+    this.webrtc.leaveRoom();
+    window.location.reload();
+  }
+
+  private recordCloudUploads(fileIds: string[], expiresAt: number) {
+    if (fileIds.length === 0) return;
+
+    const existing = this.getStoredCloudUploads();
+    for (const fileId of fileIds) {
+      existing.push({ fileId, expiresAt });
+    }
+    localStorage.setItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY, JSON.stringify(existing));
+  }
+
+  private getStoredCloudUploads(): Array<{ fileId: string; expiresAt: number }> {
+    const raw = localStorage.getItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY);
+    if (!raw) return [];
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.filter((entry): entry is { fileId: string; expiresAt: number } =>
+        typeof entry?.fileId === 'string' && typeof entry?.expiresAt === 'number'
+      );
+    } catch {
+      localStorage.removeItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY);
+      return [];
     }
   }
 
-  cancelTransfer() {
-    localStorage.removeItem('zavuSenderState');
-    this.webrtc.leaveRoom();
-    window.location.reload();
+  private async cleanupExpiredCloudFiles() {
+    const stored = this.getStoredCloudUploads();
+    if (stored.length === 0) return;
+
+    const now = Date.now();
+    const expired = stored.filter((entry) => entry.expiresAt <= now);
+    const fresh = stored.filter((entry) => entry.expiresAt > now);
+
+    if (expired.length === 0) return;
+
+    const result = await this.cloudStorage.deleteFiles(expired.map((entry) => entry.fileId));
+    if (!result.success) {
+      console.warn('Failed to clean up expired cloud uploads:', result.error);
+      return;
+    }
+
+    localStorage.setItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY, JSON.stringify(fresh));
   }
 
 

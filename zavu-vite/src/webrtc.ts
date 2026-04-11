@@ -22,7 +22,6 @@ export interface SignalData {
   size?: number;
   mime?: string;
   encryptionKey?: string;
-  encryptionIV?: string;
 }
 
 export class WebRTCManager {

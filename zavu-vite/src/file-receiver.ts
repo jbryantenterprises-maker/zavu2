@@ -3,8 +3,8 @@ import type { SignalData } from './webrtc.js';
 
 export class FileReceiver {
   private encryptionKey: CryptoKey | null = null;
-  private encryptionIV: Uint8Array | null = null;
-  private receivedChunks: ArrayBuffer[] = [];
+  private decryptedChunks: BlobPart[] = [];
+  private receivedBytes = 0;
   private fileMetadata: any = null;
   private onProgress?: (progress: number) => void;
   private onComplete?: (file: File) => void;
@@ -24,10 +24,9 @@ export class FileReceiver {
    * Handle metadata signal with encryption keys
    */
   async handleMetadata(data: SignalData) {
-    if (data.encryptionKey && data.encryptionIV) {
+    if (data.encryptionKey) {
       try {
         this.encryptionKey = await FileEncryption.base64ToKey(data.encryptionKey);
-        this.encryptionIV = FileEncryption.base64ToIV(data.encryptionIV);
         this.fileMetadata = { files: data.files, totalSize: data.totalSize };
       } catch (error) {
         if (this.onError) {
@@ -40,12 +39,17 @@ export class FileReceiver {
   /**
    * Handle incoming encrypted chunk
    */
-  handleChunk(chunk: ArrayBuffer, totalSize: number) {
-    this.receivedChunks.push(chunk);
-    
-    const receivedSize = this.receivedChunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
-    const progress = Math.min(Math.round((receivedSize / totalSize) * 100), 100);
-    
+  async handleChunk(chunk: ArrayBuffer, totalSize: number) {
+    if (!this.encryptionKey) {
+      throw new Error('Encryption key not available');
+    }
+
+    const decryptedChunk = await FileEncryption.decryptChunk(chunk, this.encryptionKey);
+    this.decryptedChunks.push(FileEncryption.toArrayBuffer(decryptedChunk));
+    this.receivedBytes += decryptedChunk.byteLength;
+
+    const progress = Math.min(Math.round((this.receivedBytes / totalSize) * 100), 100);
+
     if (this.onProgress) {
       this.onProgress(progress);
     }
@@ -56,26 +60,12 @@ export class FileReceiver {
    */
   async completeFile(fileName: string, mimeType: string): Promise<File | null> {
     try {
-      if (!this.encryptionKey || !this.encryptionIV) {
+      if (!this.encryptionKey) {
         throw new Error('Encryption keys not available');
       }
 
-      // Combine all received chunks without duplicating memory manually
-      const totalEncryptedData = await this.combineChunks();
-      
-      // Decrypt the data
-      const decryptionResult = await FileEncryption.decryptFile(
-        totalEncryptedData,
-        this.encryptionKey,
-        this.encryptionIV
-      );
-
-      if (!decryptionResult.success) {
-        throw new Error(decryptionResult.error || 'Decryption failed');
-      }
-
       // Create file from decrypted data
-      const decryptedFile = new File([decryptionResult.decryptedData], fileName, {
+      const decryptedFile = new File(this.decryptedChunks, fileName, {
         type: mimeType || 'application/octet-stream'
       });
 
@@ -93,25 +83,11 @@ export class FileReceiver {
   }
 
   /**
-   * Combine all received chunks into single ArrayBuffer natively
-   */
-  private async combineChunks(): Promise<ArrayBuffer> {
-    const blob = new Blob(this.receivedChunks);
-    return await blob.arrayBuffer();
-  }
-
-  /**
    * Reset receiver state for new file
    */
   reset() {
-    this.receivedChunks = [];
-  }
-
-  /**
-   * Update the IV for the current file (AES-GCM requires unique IV per encryption)
-   */
-  updateIV(base64IV: string) {
-    this.encryptionIV = FileEncryption.base64ToIV(base64IV);
+    this.decryptedChunks = [];
+    this.receivedBytes = 0;
   }
 
   /**
@@ -125,6 +101,6 @@ export class FileReceiver {
    * Check if encryption is enabled
    */
   isEncryptionEnabled(): boolean {
-    return this.encryptionKey !== null && this.encryptionIV !== null;
+    return this.encryptionKey !== null;
   }
 }

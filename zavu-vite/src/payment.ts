@@ -1,13 +1,8 @@
-import { lemonSqueezySetup } from '@lemonsqueezy/lemonsqueezy.js';
 import { AuthService } from './auth';
 
 export class PaymentService {
   static init() {
-    // Basic init of Lemon Squeezy integration
-    lemonSqueezySetup({
-      apiKey: import.meta.env.VITE_LEMON_SQUEEZY_API_KEY || '',
-      onError: (error) => console.error("Lemon Squeezy error: ", error)   
-    });
+    // Checkout is created server-side in Pages Functions.
   }
 
   static async upgradeToPro() {
@@ -17,48 +12,29 @@ export class PaymentService {
       return;
     }
 
-    const storeId = import.meta.env.VITE_LEMON_SQUEEZY_STORE_ID;
-    const variantId = import.meta.env.VITE_LEMON_SQUEEZY_PRO_VARIANT_ID;
-
-    
-    // In a real application, consider creating the checkout server-side or 
-    // relying on the LemonSqueezy's frontend script for generic overlays
-    // We pass the user's UID to `checkoutData.custom.user_id` so the webhook knows who paid.
-    
     try {
-      /* 
-       * Note: createCheckout typically requires a server-side API call unless you use 
-       * a direct product link with the LemonSqueezy.js snippet logic. 
-       * Assuming you have a checkout link: https://your-store.lemonsqueezy.com/checkout/buy/VARIANT_ID
-       */
-      
-      const checkoutUrl = `https://${storeId}.lemonsqueezy.com/checkout/buy/${variantId}?checkout[custom][user_id]=${user.uid}`;
-      
-      // Lemon.js overlay opens the link. For this to work, Lemon.js must be in the DOM.
-      // E.g., <script src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
-      if (window.LemonSqueezy) {
-        window.LemonSqueezy.Url.Open(checkoutUrl);
-      } else {
-        window.open(checkoutUrl, '_blank');
+      const idToken = await AuthService.getIdToken();
+      if (!idToken) {
+        alert("Please sign in again to continue.");
+        return;
       }
 
-      // For testing exclusively - mocking upgrade (DEV only):
-      if (import.meta.env.DEV && storeId === "YOUR_STORE_ID") {
-         console.warn("MOCKING PRO UPGRADE (dev only)!");
-         localStorage.setItem(`zavu_pro_${user.uid}`, "true");
-         alert("Mock Pro Upgrade Successful! Please refresh.");
-         window.location.reload();
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+        },
+      });
+
+      const result = await response.json() as { success: boolean; checkoutUrl?: string; error?: string };
+      if (!response.ok || !result.success || !result.checkoutUrl) {
+        throw new Error(result.error || `Checkout failed (HTTP ${response.status})`);
       }
 
+      window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
     } catch (e) {
       console.error("Failed to trigger checkout", e);
+      alert("Unable to start checkout right now.");
     }
-  }
-}
-
-// Add LemonSqueezy types mapping into window
-declare global {
-  interface Window {
-    LemonSqueezy: any;
   }
 }

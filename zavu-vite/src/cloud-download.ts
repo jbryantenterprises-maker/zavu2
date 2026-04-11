@@ -14,8 +14,6 @@ export interface CloudDownloadParams {
   isPasswordProtected: boolean;
   /** Raw key (base64) — present when not password-protected */
   key?: string;
-  /** Raw IV (base64) — present when not password-protected */
-  iv?: string;
   /** Wrapped bundle (base64) — present when password-protected */
   wrappedBundle?: string;
   /** PBKDF2 salt (base64) — present when password-protected */
@@ -48,13 +46,11 @@ export function parseCloudDownloadFragment(hash: string): CloudDownloadParams | 
   }
 
   const key = params.get('key');
-  const iv = params.get('iv');
-  if (!key || !iv) return null;
+  if (!key) return null;
 
   return {
     isPasswordProtected: false,
     key: decodeURIComponent(key),
-    iv: decodeURIComponent(iv),
   };
 }
 
@@ -75,7 +71,6 @@ export async function downloadAndDecryptFile(
   try {
     // ── 1. Resolve decryption key ─────────────────────────────────────
     let cryptoKey: CryptoKey;
-    let iv: Uint8Array;
 
     if (params.isPasswordProtected) {
       if (!password) {
@@ -97,13 +92,11 @@ export async function downloadAndDecryptFile(
       }
 
       cryptoKey = unwrapped.key;
-      iv = unwrapped.iv;
     } else {
-      if (!params.key || !params.iv) {
+      if (!params.key) {
         return { success: false, error: 'Missing decryption key in link.' };
       }
       cryptoKey = await FileEncryption.base64ToKey(params.key);
-      iv = FileEncryption.base64ToIV(params.iv);
     }
 
     onProgress?.(5);
@@ -130,14 +123,30 @@ export async function downloadAndDecryptFile(
       return { success: false, error: 'Browser does not support streaming downloads.' };
     }
 
-    const chunks: Uint8Array[] = [];
+    const decryptedChunks: BlobPart[] = [];
     let receivedBytes = 0;
+    let pending = new Uint8Array(0);
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(value);
+      const merged = new Uint8Array(pending.byteLength + value.byteLength);
+      merged.set(pending, 0);
+      merged.set(value, pending.byteLength);
+      pending = merged;
       receivedBytes += value.length;
+
+      while (pending.byteLength >= 4) {
+        const frameLength = new DataView(pending.buffer, pending.byteOffset, pending.byteLength).getUint32(0);
+        const totalFrameLength = 16 + frameLength;
+        if (pending.byteLength < totalFrameLength) break;
+
+        const frame = pending.slice(0, totalFrameLength);
+        pending = pending.slice(totalFrameLength);
+        const decryptedChunk = await FileEncryption.decryptChunk(frame, cryptoKey);
+        decryptedChunks.push(FileEncryption.toArrayBuffer(decryptedChunk));
+      }
+
       if (contentLength > 0) {
         // 5–70% range for download progress
         const dlProgress = 5 + Math.round((receivedBytes / contentLength) * 65);
@@ -145,21 +154,11 @@ export async function downloadAndDecryptFile(
       }
     }
 
-    // Combine chunks
-    const encryptedData = new Uint8Array(receivedBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      encryptedData.set(chunk, offset);
-      offset += chunk.length;
+    if (pending.byteLength > 0) {
+      return { success: false, error: 'Download ended with a truncated encrypted chunk.' };
     }
 
     onProgress?.(75);
-
-    // ── 3. Decrypt ────────────────────────────────────────────────────
-    const result = await FileEncryption.decryptFile(encryptedData.buffer as ArrayBuffer, cryptoKey, iv);
-    if (!result.success) {
-      return { success: false, error: result.error || 'Decryption failed.' };
-    }
 
     onProgress?.(95);
 
@@ -172,7 +171,7 @@ export async function downloadAndDecryptFile(
       fileName = decodeURIComponent(filenameMatch[1].replace(/"/g, ''));
     }
 
-    const blob = new Blob([result.decryptedData], { type: 'application/octet-stream' });
+    const blob = new Blob(decryptedChunks, { type: 'application/octet-stream' });
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;

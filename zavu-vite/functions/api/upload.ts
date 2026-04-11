@@ -1,90 +1,72 @@
 /**
  * POST /api/upload
  *
- * Accepts a file upload from a Pro user and stores it in R2.
- * Returns an HMAC-signed download URL valid for 7 days.
- *
- * Headers:
- *   Authorization: Bearer <firebase-id-token>
- *
- * Body: multipart/form-data with a "file" field
- *
- * Response: { success: true, downloadUrl: string, fileId: string }
+ * Creates a multipart upload session for a Pro user.
+ * The browser then uploads bounded parts through /api/upload/part and
+ * finalizes the object via /api/upload/complete.
  */
-import { verifyFirebaseJWT, signDownloadToken } from './_auth';
+import {
+  authenticateUser,
+  CloudUploadEnv,
+  computePartSize,
+  getMultipartLimits,
+  normalizeFileName,
+} from './_cloud-upload';
 
-interface Env {
-  ZAVU_BUCKET: R2Bucket;
-  FIREBASE_PROJECT_ID: string;
-  DOWNLOAD_SIGNING_SECRET: string;
+interface CreateUploadRequest {
+  fileName?: unknown;
+  fileSize?: unknown;
 }
 
-export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const { request, env } = context;
+export const onRequestPost: PagesFunction<CloudUploadEnv> = async ({ request, env }) => {
+  const user = await authenticateUser(request, env, true);
+  if (user instanceof Response) return user;
 
-  // ── 1. Authenticate ────────────────────────────────────────────────
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return Response.json({ success: false, error: 'Missing authorization token' }, { status: 401 });
-  }
-
-  const idToken = authHeader.slice(7);
-  const user = await verifyFirebaseJWT(idToken, env.FIREBASE_PROJECT_ID);
-  if (!user) {
-    return Response.json({ success: false, error: 'Invalid or expired token' }, { status: 401 });
-  }
-
-  // ── 2. Verify Pro status ───────────────────────────────────────────
-  if (!user.isPro) {
-    return Response.json(
-      { success: false, error: 'Pro subscription required for cloud uploads' },
-      { status: 403 }
-    );
-  }
-
-  // ── 3. Parse the uploaded file ─────────────────────────────────────
-  let formData: FormData;
+  let body: CreateUploadRequest;
   try {
-    formData = await request.formData();
+    body = await request.json();
   } catch {
-    return Response.json({ success: false, error: 'Invalid form data' }, { status: 400 });
+    return Response.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const file = formData.get('file') as File | null;
-  if (!file) {
-    return Response.json({ success: false, error: 'No file provided' }, { status: 400 });
+  const fileName = normalizeFileName(typeof body.fileName === 'string' ? body.fileName : '');
+  const fileSize = typeof body.fileSize === 'number' ? body.fileSize : NaN;
+  if (!fileName) {
+    return Response.json({ success: false, error: 'Missing file name' }, { status: 400 });
+  }
+  if (!Number.isFinite(fileSize) || fileSize < 0) {
+    return Response.json({ success: false, error: 'Invalid file size' }, { status: 400 });
   }
 
-  // ── 4. Store in R2 ────────────────────────────────────────────────
-  const fileId = crypto.randomUUID();
-  const r2Key = `${user.uid}/${fileId}/${file.name}`;
-
-  try {
-    await env.ZAVU_BUCKET.put(r2Key, file.stream(), {
-      httpMetadata: {
-        contentType: file.type || 'application/octet-stream',
-      },
-      customMetadata: {
-        originalName: file.name,
-        uploadedBy: user.uid,
-        uploadedAt: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    console.error('R2 upload failed:', err);
-    return Response.json({ success: false, error: 'Storage upload failed' }, { status: 500 });
+  const { maxUploadBytes, maxPartBytes } = getMultipartLimits(env);
+  if (fileSize > maxUploadBytes) {
+    return Response.json({ success: false, error: 'File exceeds the cloud upload limit' }, { status: 413 });
   }
 
-  // ── 5. Generate signed download URL (7 days) ──────────────────────
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days from now
-  const token = await signDownloadToken(r2Key, expiresAt, env.DOWNLOAD_SIGNING_SECRET);
+  const partSize = computePartSize(fileSize, maxPartBytes);
+  if (!partSize) {
+    return Response.json({ success: false, error: 'File requires upload parts larger than the configured limit' }, { status: 413 });
+  }
 
-  const origin = new URL(request.url).origin;
-  const downloadUrl = `${origin}/api/download/${encodeURIComponent(r2Key)}?token=${token}&expires=${expiresAt}`;
+  const fileId = `${user.uid}/${crypto.randomUUID()}/${fileName}`;
+  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+  const multipart = await env.ZAVU_BUCKET.createMultipartUpload(fileId, {
+    httpMetadata: {
+      contentType: 'application/octet-stream',
+    },
+    customMetadata: {
+      originalName: fileName,
+      uploadedBy: user.uid,
+      uploadedAt: new Date().toISOString(),
+      expiresAt: expiresAt.toString(),
+    },
+  });
 
   return Response.json({
     success: true,
-    downloadUrl,
-    fileId: r2Key,
+    fileId,
+    uploadId: multipart.uploadId,
+    expiresAt,
+    partSize,
   });
 };

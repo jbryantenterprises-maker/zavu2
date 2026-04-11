@@ -13,6 +13,8 @@ export interface DecryptionResult {
 export class FileEncryption {
   private static readonly ALGORITHM = 'AES-GCM';
   private static readonly KEY_LENGTH = 256;
+  private static readonly IV_LENGTH = 12;
+  private static readonly FRAME_HEADER_LENGTH = 4 + this.IV_LENGTH;
 
   /**
    * Generate a new encryption key for each file transfer
@@ -32,7 +34,7 @@ export class FileEncryption {
    * Generate a random initialization vector
    */
   static generateIV(): Uint8Array {
-    return window.crypto.getRandomValues(new Uint8Array(12)); // 96 bits for AES-GCM
+    return window.crypto.getRandomValues(new Uint8Array(this.IV_LENGTH)); // 96 bits for AES-GCM
   }
 
   /**
@@ -50,7 +52,7 @@ export class FileEncryption {
       const encryptedData = await window.crypto.subtle.encrypt(
         {
           name: this.ALGORITHM,
-          iv: iv.buffer as ArrayBuffer,
+          iv: this.toArrayBuffer(iv),
         },
         key,
         file
@@ -78,7 +80,7 @@ export class FileEncryption {
       const decryptedData = await window.crypto.subtle.decrypt(
         {
           name: this.ALGORITHM,
-          iv: new Uint8Array(iv),
+          iv: this.toArrayBuffer(iv),
         },
         key,
         encryptedData
@@ -166,49 +168,75 @@ export class FileEncryption {
   }
 
   /**
-   * Encrypt file in chunks for large files
+   * Encrypt a single plaintext chunk and return a framed payload:
+   * [4-byte ciphertext length][12-byte IV][ciphertext]
    */
-  static async encryptFileInChunks(
-    file: ArrayBuffer,
-    chunkSize: number = 1024 * 1024, // 1MB chunks
-    onProgress?: (progress: number) => void
-  ): Promise<{
-    encryptedChunks: ArrayBuffer[];
-    key: CryptoKey;
-    iv: Uint8Array;
-  }> {
-    const key = await this.generateKey();
+  static async encryptChunk(chunk: BufferSource, key: CryptoKey): Promise<Uint8Array> {
     const iv = this.generateIV();
-    const encryptedChunks: ArrayBuffer[] = [];
-    
-    const totalChunks = Math.ceil(file.byteLength / chunkSize);
-    
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, file.byteLength);
-      const chunk = file.slice(start, end);
-      
-      const encryptedChunk = await window.crypto.subtle.encrypt(
-        {
-          name: this.ALGORITHM,
-          iv: new Uint8Array(iv), // Note: For chunked encryption, you might want different IVs per chunk
-        },
-        key,
-        chunk
-      );
-      
-      encryptedChunks.push(encryptedChunk);
-      
-      if (onProgress) {
-        onProgress(((i + 1) / totalChunks) * 100);
-      }
-    }
-    
-    return {
-      encryptedChunks,
+    const encrypted = await window.crypto.subtle.encrypt(
+      {
+        name: this.ALGORITHM,
+        iv: this.toArrayBuffer(iv),
+      },
       key,
-      iv
-    };
+      chunk
+    );
+
+    return this.frameEncryptedChunk(iv, new Uint8Array(encrypted));
+  }
+
+  /**
+   * Decrypt a framed payload produced by encryptChunk().
+   */
+  static async decryptChunk(frame: ArrayBuffer | Uint8Array, key: CryptoKey): Promise<Uint8Array> {
+    const { iv, ciphertext } = this.parseEncryptedChunk(frame);
+    const decrypted = await window.crypto.subtle.decrypt(
+      {
+        name: this.ALGORITHM,
+        iv: this.toArrayBuffer(iv),
+      },
+      key,
+      this.toArrayBuffer(ciphertext)
+    );
+
+    return new Uint8Array(decrypted);
+  }
+
+  /**
+   * Return true when a frame contains one complete encrypted chunk.
+   */
+  static isCompleteFrame(frame: Uint8Array): boolean {
+    if (frame.byteLength < this.FRAME_HEADER_LENGTH) return false;
+    const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+    const ciphertextLength = view.getUint32(0);
+    return frame.byteLength === this.FRAME_HEADER_LENGTH + ciphertextLength;
+  }
+
+  private static frameEncryptedChunk(iv: Uint8Array, ciphertext: Uint8Array): Uint8Array {
+    const framed = new Uint8Array(this.FRAME_HEADER_LENGTH + ciphertext.byteLength);
+    const view = new DataView(framed.buffer);
+    view.setUint32(0, ciphertext.byteLength);
+    framed.set(iv, 4);
+    framed.set(ciphertext, this.FRAME_HEADER_LENGTH);
+    return framed;
+  }
+
+  private static parseEncryptedChunk(frame: ArrayBuffer | Uint8Array): { iv: Uint8Array; ciphertext: Uint8Array } {
+    const bytes = frame instanceof Uint8Array ? frame : new Uint8Array(frame);
+    if (!this.isCompleteFrame(bytes)) {
+      throw new Error('Invalid encrypted chunk frame');
+    }
+
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const ciphertextLength = view.getUint32(0);
+    const iv = bytes.slice(4, this.FRAME_HEADER_LENGTH);
+    const ciphertext = bytes.slice(this.FRAME_HEADER_LENGTH, this.FRAME_HEADER_LENGTH + ciphertextLength);
+
+    return { iv, ciphertext };
+  }
+
+  static toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   }
 
   // ── Password-Based Key Wrapping (PBKDF2) ─────────────────────────────
@@ -310,4 +338,3 @@ export class FileEncryption {
     }
   }
 }
-
