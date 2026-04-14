@@ -19,6 +19,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       hasProId: !!env.LEMON_SQUEEZY_PRO_VARIANT_ID
     }
   });
+
+  // Test logging for debugging environment variables
+  console.log('=== ENVIRONMENT VARIABLES DEBUG ===');
+  console.log('LEMON_SQUEEZY_STORE_ID:', env.LEMON_SQUEEZY_STORE_ID);
+  console.log('LEMON_SQUEEZY_MONTHLY_VARIANT_ID:', env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID);
+  console.log('LEMON_SQUEEZY_YEARLY_VARIANT_ID:', env.LEMON_SQUEEZY_YEARLY_VARIANT_ID);
+  console.log('LEMON_SQUEEZY_PRO_VARIANT_ID:', env.LEMON_SQUEEZY_PRO_VARIANT_ID);
+  console.log('FIREBASE_PROJECT_ID:', env.FIREBASE_PROJECT_ID);
+  console.log('=== END DEBUG ===');
   
   if (!authHeader?.startsWith('Bearer ')) {
     console.error('Missing or invalid authorization header');
