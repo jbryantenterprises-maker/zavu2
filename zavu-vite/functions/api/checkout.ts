@@ -3,8 +3,9 @@ import { verifyFirebaseJWT } from './_auth';
 interface Env {
   FIREBASE_PROJECT_ID: string;
   LEMON_SQUEEZY_STORE_ID: string;
-  LEMON_SQUEEZY_MONTHLY_VARIANT_ID: string;
-  LEMON_SQUEEZY_YEARLY_VARIANT_ID: string;
+  LEMON_SQUEEZY_MONTHLY_VARIANT_ID?: string;
+  LEMON_SQUEEZY_YEARLY_VARIANT_ID?: string;
+  LEMON_SQUEEZY_PRO_VARIANT_ID?: string; // Backward compatibility
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -18,7 +19,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return Response.json({ success: false, error: 'Invalid or expired token' }, { status: 401 });
   }
 
-  if (!env.LEMON_SQUEEZY_STORE_ID || !env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID || !env.LEMON_SQUEEZY_YEARLY_VARIANT_ID) {
+  // Check for required environment variables
+  if (!env.LEMON_SQUEEZY_STORE_ID) {
     return Response.json({ success: false, error: 'Checkout is not configured' }, { status: 500 });
   }
 
@@ -31,10 +33,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // If body parsing fails, use default monthly plan
   }
 
-  // Select variant based on plan
-  const variantId = plan === 'yearly' 
-    ? env.LEMON_SQUEEZY_YEARLY_VARIANT_ID 
-    : env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID;
+  // Select variant based on plan and available environment variables
+  let variantId: string;
+  
+  if (env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID && env.LEMON_SQUEEZY_YEARLY_VARIANT_ID) {
+    // New configuration with separate monthly/yearly variants
+    variantId = plan === 'yearly' 
+      ? env.LEMON_SQUEEZY_YEARLY_VARIANT_ID 
+      : env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID;
+  } else if (env.LEMON_SQUEEZY_PRO_VARIANT_ID) {
+    // Backward compatibility - use single variant for both plans
+    variantId = env.LEMON_SQUEEZY_PRO_VARIANT_ID;
+  } else {
+    return Response.json({ success: false, error: 'Checkout variants not configured' }, { status: 500 });
+  }
 
   const checkoutUrl =
     `https://${env.LEMON_SQUEEZY_STORE_ID}.lemonsqueezy.com/checkout/buy/${variantId}` +
