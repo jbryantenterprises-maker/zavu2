@@ -95,7 +95,73 @@ export class XavuApp {
     if (AuthService.getUser()) {
       AuthService.signOut();
     } else {
-      AuthService.signInWithGoogle();
+      this.showSignInModal();
+    }
+  }
+
+  showSignInModal() {
+    UIHelper.showElement('signin-modal');
+    UIHelper.hideElement('signup-modal');
+    UIHelper.hideElement('reset-modal');
+  }
+
+  showSignUpModal() {
+    UIHelper.showElement('signup-modal');
+    UIHelper.hideElement('signin-modal');
+    UIHelper.hideElement('reset-modal');
+  }
+
+  showResetModal() {
+    UIHelper.showElement('reset-modal');
+    UIHelper.hideElement('signin-modal');
+    UIHelper.hideElement('signup-modal');
+  }
+
+  hideAuthModals() {
+    UIHelper.hideElement('signin-modal');
+    UIHelper.hideElement('signup-modal');
+    UIHelper.hideElement('reset-modal');
+  }
+
+  async handleSignIn(email: string, password: string) {
+    const result = await AuthService.signIn(email, password);
+    if (result.success) {
+      this.hideAuthModals();
+      UIHelper.hideElement('signin-error');
+    } else {
+      UIHelper.showElement('signin-error');
+      UIHelper.updateElementText('signin-error', result.error || 'Sign in failed');
+    }
+  }
+
+  async handleSignUp(email: string, password: string, confirmPassword: string) {
+    if (password !== confirmPassword) {
+      UIHelper.showElement('signup-error');
+      UIHelper.updateElementText('signup-error', 'Passwords do not match');
+      return;
+    }
+
+    const result = await AuthService.signUp(email, password);
+    if (result.success) {
+      this.hideAuthModals();
+      UIHelper.hideElement('signup-error');
+    } else {
+      UIHelper.showElement('signup-error');
+      UIHelper.updateElementText('signup-error', result.error || 'Sign up failed');
+    }
+  }
+
+  async handlePasswordReset(email: string) {
+    const result = await AuthService.resetPassword(email);
+    if (result.success) {
+      UIHelper.showElement('reset-success');
+      UIHelper.hideElement('reset-error');
+      UIHelper.updateElementText('reset-success', 'Password reset email sent! Check your inbox.');
+      setTimeout(() => this.showSignInModal(), 3000);
+    } else {
+      UIHelper.showElement('reset-error');
+      UIHelper.hideElement('reset-success');
+      UIHelper.updateElementText('reset-error', result.error || 'Failed to send reset email');
     }
   }
 

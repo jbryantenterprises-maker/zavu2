@@ -45,6 +45,42 @@ function bindUI(app: XavuApp) {
   bindClick('start-download-btn', () => app.startDownload())
   bindClick('hide-how-it-works-btn', () => ModalHelpers.hideHowItWorks())
 
+  // Authentication modal bindings
+  bindClick('switch-to-signup-btn', () => app.showSignUpModal())
+  bindClick('switch-to-signin-btn', () => app.showSignInModal())
+  bindClick('forgot-password-btn', () => app.showResetModal())
+  bindClick('close-signin-btn', () => app.hideAuthModals())
+  bindClick('close-signup-btn', () => app.hideAuthModals())
+  bindClick('close-reset-btn', () => app.showSignInModal())
+
+  // Form submissions
+  bindSubmit('signin-form', async (event) => {
+    event.preventDefault()
+    const email = (document.getElementById('signin-email') as HTMLInputElement)?.value
+    const password = (document.getElementById('signin-password') as HTMLInputElement)?.value
+    if (email && password) {
+      await app.handleSignIn(email, password)
+    }
+  })
+
+  bindSubmit('signup-form', async (event) => {
+    event.preventDefault()
+    const email = (document.getElementById('signup-email') as HTMLInputElement)?.value
+    const password = (document.getElementById('signup-password') as HTMLInputElement)?.value
+    const confirmPassword = (document.getElementById('signup-confirm-password') as HTMLInputElement)?.value
+    if (email && password && confirmPassword) {
+      await app.handleSignUp(email, password, confirmPassword)
+    }
+  })
+
+  bindSubmit('reset-form', async (event) => {
+    event.preventDefault()
+    const email = (document.getElementById('reset-email') as HTMLInputElement)?.value
+    if (email) {
+      await app.handlePasswordReset(email)
+    }
+  })
+
   bindModalDismiss('how-modal', () => ModalHelpers.hideHowItWorks())
   bindModalDismiss('qr-modal', () => app.hideQR())
 
@@ -60,6 +96,11 @@ function bindClick(id: string, listener: (event: MouseEvent) => void) {
 
 function bindChange(id: string, listener: (event: Event) => void) {
   document.getElementById(id)?.addEventListener('change', listener)
+}
+
+function bindSubmit(id: string, listener: (event: SubmitEvent) => void) {
+  const element = document.getElementById(id) as HTMLFormElement | null
+  element?.addEventListener('submit', listener)
 }
 
 function bindModalDismiss(id: string, onDismiss: () => void) {

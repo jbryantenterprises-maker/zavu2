@@ -340,6 +340,147 @@
         </div>
     </div>
 
+    <!-- Sign In Modal -->
+    <div id="signin-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl p-8">
+            <h2 class="text-3xl font-semibold mb-6 text-center">Sign In</h2>
+            
+            <form id="signin-form" class="space-y-4">
+                <div>
+                    <label for="signin-email" class="block text-sm font-medium text-zinc-300 mb-2">Email</label>
+                    <input type="email" id="signin-email" required
+                        class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                        placeholder="your@email.com">
+                </div>
+                
+                <div>
+                    <label for="signin-password" class="block text-sm font-medium text-zinc-300 mb-2">Password</label>
+                    <input type="password" id="signin-password" required
+                        class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                        placeholder="Enter your password">
+                </div>
+                
+                <div id="signin-error" class="hidden text-red-400 text-sm text-center"></div>
+                
+                <button type="submit" id="signin-submit-btn"
+                    class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-3 rounded-2xl transition-colors">
+                    Sign In
+                </button>
+                
+                <div class="text-center">
+                    <button type="button" id="forgot-password-btn"
+                        class="text-emerald-400 hover:text-emerald-300 text-sm transition-colors">
+                        Forgot password?
+                    </button>
+                </div>
+            </form>
+            
+            <div class="mt-6 text-center text-zinc-400 text-sm">
+                Don't have an account? 
+                <button id="switch-to-signup-btn" class="text-emerald-400 hover:text-emerald-300 transition-colors">
+                    Sign up
+                </button>
+            </div>
+            
+            <button id="close-signin-btn"
+                class="mt-6 w-full py-2 text-zinc-400 hover:text-white text-sm transition-colors">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+    <!-- Sign Up Modal -->
+    <div id="signup-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl p-8">
+            <h2 class="text-3xl font-semibold mb-6 text-center">Create Account</h2>
+            
+            <form id="signup-form" class="space-y-4">
+                <div>
+                    <label for="signup-email" class="block text-sm font-medium text-zinc-300 mb-2">Email</label>
+                    <input type="email" id="signup-email" required
+                        class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                        placeholder="your@email.com">
+                </div>
+                
+                <div>
+                    <label for="signup-password" class="block text-sm font-medium text-zinc-300 mb-2">Password</label>
+                    <input type="password" id="signup-password" required minlength="12"
+                        class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                        placeholder="Min 12 chars, uppercase & lowercase">
+                    <p class="text-xs text-zinc-500 mt-1">Must contain at least 12 characters with uppercase and lowercase letters</p>
+                </div>
+                
+                <div>
+                    <label for="signup-confirm-password" class="block text-sm font-medium text-zinc-300 mb-2">Confirm Password</label>
+                    <input type="password" id="signup-confirm-password" required minlength="12"
+                        class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                        placeholder="Confirm password">
+                </div>
+                
+                <div id="signup-error" class="hidden text-red-400 text-sm text-center"></div>
+                
+                <div class="text-xs text-zinc-500">
+                    By creating an account, you agree to our 
+                    <a href="/terms" target="_blank" class="text-emerald-400 hover:text-emerald-300 transition-colors">Terms of Service</a> 
+                    and 
+                    <a href="/privacy" target="_blank" class="text-emerald-400 hover:text-emerald-300 transition-colors">Privacy Policy</a>.
+                </div>
+                
+                <button type="submit" id="signup-submit-btn"
+                    class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-3 rounded-2xl transition-colors">
+                    Create Account
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center text-zinc-400 text-sm">
+                Already have an account? 
+                <button id="switch-to-signin-btn" class="text-emerald-400 hover:text-emerald-300 transition-colors">
+                    Sign in
+                </button>
+            </div>
+            
+            <button id="close-signup-btn"
+                class="mt-6 w-full py-2 text-zinc-400 hover:text-white text-sm transition-colors">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+    <!-- Password Reset Modal -->
+    <div id="reset-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl p-8">
+            <h2 class="text-2xl font-semibold mb-6 text-center">Reset Password</h2>
+            <p class="text-zinc-400 text-sm mb-6 text-center">
+                Enter your email address and we'll send you a link to reset your password.
+            </p>
+            
+            <form id="reset-form" class="space-y-4">
+                <div>
+                    <label for="reset-email" class="block text-sm font-medium text-zinc-300 mb-2">Email</label>
+                    <input type="email" id="reset-email" required
+                        class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                        placeholder="your@email.com">
+                </div>
+                
+                <div id="reset-error" class="hidden text-red-400 text-sm text-center"></div>
+                <div id="reset-success" class="hidden text-emerald-400 text-sm text-center"></div>
+                
+                <button type="submit" id="reset-submit-btn"
+                    class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-3 rounded-2xl transition-colors">
+                    Send Reset Email
+                </button>
+            </form>
+            
+            <button id="close-reset-btn"
+                class="mt-6 w-full py-2 text-zinc-400 hover:text-white text-sm transition-colors">
+                Back to Sign In
+            </button>
+        </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
 </body>
 
