@@ -14,7 +14,7 @@
     
     <!-- Inline Emoji Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⇄</text></svg>">
-    
+
     <!-- Suppress Tailwind CDN production warning for clean console -->
     <script>
         const originalWarn = console.warn;
@@ -36,6 +36,14 @@
             font-family: 'Inter', system_ui, sans-serif;
         }
 
+        .main-content {
+            display: none;
+        }
+
+        body.loaded .main-content {
+            display: block;
+        }
+
         .logo-font {
             font-family: 'Space Grotesk', sans-serif;
         }
@@ -47,10 +55,33 @@
         .terminal {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         }
+
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: #09090b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.3s ease;
+        }
+
+        #loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
     </style>
 </head>
 
-<body class="bg-zinc-950 text-white min-h-screen">
+<body class="bg-zinc-950 text-white min-h-screen" style="background-color: #09090b; color: white; min-height: 100vh;">
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div style="color: #00ff9d; font-size: 24px; font-weight: 600;">⇄ Zavu</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
     <!-- HEADER -->
     <nav class="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-50">
         <div class="max-w-screen-xl mx-auto px-6 py-5 flex items-center justify-between">
@@ -310,6 +341,7 @@
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- MODALS -->
@@ -1194,6 +1226,29 @@
         window.checkResumeState = checkResumeState;
         window.clearResumeState = clearResumeState;
         window.handleResumeFileSelect = handleResumeFileSelect;
+
+        // Show content after Tailwind has fully loaded and processed
+        window.addEventListener('load', () => {
+            // Delay to ensure Tailwind has scanned and applied all styles
+            setTimeout(() => {
+                requestAnimationFrame(() => {
+                    document.body.classList.add('loaded');
+                    const overlay = document.getElementById('loading-overlay');
+                    if (overlay) {
+                        overlay.classList.add('hidden');
+                    }
+                });
+            }, 1000);
+
+            // Fallback: ensure content is shown after 3 seconds regardless
+            setTimeout(() => {
+                document.body.classList.add('loaded');
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay && !overlay.classList.contains('hidden')) {
+                    overlay.classList.add('hidden');
+                }
+            }, 3000);
+        });
     </script>
 </body>
 
