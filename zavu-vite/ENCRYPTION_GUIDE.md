@@ -1,4 +1,4 @@
-# Client-Side File Encryption for Zavu
+# Client-Side File Encryption for Xavu
 
 ## Overview
 This implementation adds **AES-GCM encryption** to your file transfer system, ensuring files are encrypted on the sender's client and decrypted on the receiver's client.
@@ -154,4 +154,4 @@ const file = await receiver.completeFile(fileName, mimeType);
 
 ---
 
-**Result**: Your Zavu file transfer now includes **military-grade encryption** while maintaining excellent performance and user experience.
+**Result**: Your Xavu file transfer now includes **military-grade encryption** while maintaining excellent performance and user experience.

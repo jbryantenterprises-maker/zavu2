@@ -1,7 +1,7 @@
-# Cloud Storage Integration for Zavu (Cloudflare R2 via Pages Functions)
+# Cloud Storage Integration for Xavu (Cloudflare R2 via Pages Functions)
 
 ## Overview
-Zavu Pro users can create 7-day permanent download links by uploading files to Cloudflare R2. Uploads are handled as **presigned multipart uploads**: Pages Functions authenticate and sign each part, but the encrypted part bytes go directly from the browser to R2.
+Xavu Pro users can create 7-day permanent download links by uploading files to Cloudflare R2. Uploads are handled as **presigned multipart uploads**: Pages Functions authenticate and sign each part, but the encrypted part bytes go directly from the browser to R2.
 
 ## Architecture
 
