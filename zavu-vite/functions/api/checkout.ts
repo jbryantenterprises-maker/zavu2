@@ -84,11 +84,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }, { status: 500 });
   }
 
-  const checkoutUrl =
-    `https://${env.LEMON_SQUEEZY_STORE_ID}.lemonsqueezy.com/checkout/buy/${variantId}` +
-    `?checkout[custom][user_id]=${encodeURIComponent(user.uid)}`;
+  const baseUrl = `https://${env.LEMON_SQUEEZY_STORE_ID}.lemonsqueezy.com/checkout/buy/${variantId}`;
+  const checkoutUrl = `${baseUrl}?checkout[custom][user_id]=${encodeURIComponent(user.uid)}`;
 
-  console.log('Checkout URL generated:', { userId: user.uid, variantId, url: checkoutUrl });
+  console.log('=== CHECKOUT URL DEBUG ===');
+  console.log('Store ID:', env.LEMON_SQUEEZY_STORE_ID);
+  console.log('Variant ID:', variantId);
+  console.log('Base URL:', baseUrl);
+  console.log('Full checkout URL:', checkoutUrl);
+  console.log('User ID:', user.uid);
+  console.log('=== END URL DEBUG ===');
 
   return Response.json({
     success: true,
