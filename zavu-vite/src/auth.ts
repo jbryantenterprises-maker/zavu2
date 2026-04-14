@@ -28,17 +28,17 @@ try {
   console.warn("Firebase not initialized. Make sure to add your config.", e);
 }
 
-export type ZavuUser = {
+export type XavuUser = {
   uid: string;
   email: string | null;
   displayName: string | null;
   isPro: boolean;
 };
 
-type AuthStateCallback = (user: ZavuUser | null) => void;
+type AuthStateCallback = (user: XavuUser | null) => void;
 
 export class AuthService {
-  private static user: ZavuUser | null = null;
+  private static user: XavuUser | null = null;
   private static listeners: AuthStateCallback[] = [];
 
   static init() {
@@ -50,7 +50,7 @@ export class AuthService {
         // authoritatively via Firebase custom claims from the JWT.
         // The Lemon Squeezy webhook must set custom claims (e.g. { pro: true })
         // on the Firebase user via the Admin SDK after purchase.
-        let isPro = localStorage.getItem(`zavu_pro_${firebaseUser.uid}`) === "true";
+        let isPro = localStorage.getItem(`xavu_pro_${firebaseUser.uid}`) === "true";
         
         try {
           const tokenResult = await firebaseUser.getIdTokenResult();
@@ -61,7 +61,7 @@ export class AuthService {
             claims.plan === 'pro'
           );
           // Update cache to match authoritative value
-          localStorage.setItem(`zavu_pro_${firebaseUser.uid}`, isPro ? "true" : "false");
+          localStorage.setItem(`xavu_pro_${firebaseUser.uid}`, isPro ? "true" : "false");
         } catch (e) {
           console.warn("Failed to fetch token claims, using cached Pro status:", e);
         }
@@ -113,7 +113,7 @@ export class AuthService {
     }
   }
 
-  static getUser(): ZavuUser | null {
+  static getUser(): XavuUser | null {
     return this.user;
   }
 

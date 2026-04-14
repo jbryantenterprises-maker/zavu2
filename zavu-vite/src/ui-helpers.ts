@@ -49,13 +49,13 @@ export class UIHelper {
   }
 
   static emailLink(link: string): void {
-    const subject = encodeURIComponent("I sent you a file via Zavu (no servers!)");
+    const subject = encodeURIComponent("I sent you a file via Xavu (no servers!)");
     const body = encodeURIComponent(`Hey!\n\nI just created a direct P2P link for you. Click it while I have the tab open:\n\n${link}\n\nFile will transfer straight from my browser to yours. No cloud. No storage.\n\nEnjoy!`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
   static emailCloudLink(links: string[]): void {
-    const subject = encodeURIComponent("I sent you a file via Zavu");
+    const subject = encodeURIComponent("I sent you a file via Xavu");
     const linkList = links.join('\n');
     const plural = links.length > 1 ? 's are' : ' is';
     const body = encodeURIComponent(`Hey!\n\nI uploaded a file for you. Use the link${links.length > 1 ? 's' : ''} below to download:\n\n${linkList}\n\nThe link${plural} valid for 7 days. Files are end-to-end encrypted — no one else can access them.\n\nEnjoy!`);

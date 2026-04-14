@@ -1,18 +1,18 @@
 import './style.css'
-import { ZavuApp } from './app.js'
+import { XavuApp } from './app.js'
 import { ModalHelpers } from './modal-helpers.js'
 
 // Initialize the app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  const app = new ZavuApp()
+  const app = new XavuApp()
 
   bindUI(app)
   
-  console.log('%cZavu v2.0 — Vite + TypeScript P2P File Transfer', 'background:#00ff9d;color:#000;font-weight:bold;padding:2px 6px;border-radius:3px')
+  console.log('%cXavu v2.0 — Vite + TypeScript P2P File Transfer', 'background:#00ff9d;color:#000;font-weight:bold;padding:2px 6px;border-radius:3px')
   console.log('No central storage. Pure peer-to-peer over WebRTC. Privacy first.')
 })
 
-function bindUI(app: ZavuApp) {
+function bindUI(app: XavuApp) {
   bindClick('how-it-works-link', (event) => {
     event.preventDefault()
     ModalHelpers.showHowItWorks()

@@ -33,7 +33,7 @@ export class WebRTCManager {
   private getChunk: ((callback: (data: ArrayBuffer, peerId: string) => void) => void) | null = null;
 
   createRoom(roomId: string) {
-    const config = { appId: 'zavu-p2p-production-app' };
+    const config = { appId: 'xavu-p2p-production-app' };
     this.currentRoom = joinRoom(config, roomId);
     
     [this.sendSignal, this.getSignal] = this.currentRoom.makeAction('signal');

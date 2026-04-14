@@ -20,8 +20,8 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export class ZavuApp {
-  private static readonly CLOUD_CLEANUP_STORAGE_KEY = 'zavuCloudFiles';
+export class XavuApp {
+  private static readonly CLOUD_CLEANUP_STORAGE_KEY = 'xavuCloudFiles';
   private webrtc: WebRTCManager;
   private fileHandler: FileHandler;
   private cloudStorage: CloudStorageService;
@@ -232,7 +232,7 @@ export class ZavuApp {
   }
 
   pasteLink() {
-    const link = prompt("Paste the Zavu URL you received via email:");
+    const link = prompt("Paste the Xavu URL you received via email:");
     if (!link) return;
     
     try {
@@ -246,7 +246,7 @@ export class ZavuApp {
       } else if (url.pathname.includes('/api/download/') && url.hash) {
         window.location.href = link;
       } else {
-        alert("Invalid link. Use a Zavu P2P link or a cloud download link.");
+        alert("Invalid link. Use a Xavu P2P link or a cloud download link.");
       }
     } catch (e) {
       alert("Not a valid URL");
@@ -373,7 +373,7 @@ export class ZavuApp {
       this.updateLinkScreenText(false);
       UIHelper.showElement('link-screen');
 
-      console.log('%c✅ Zavu created — ID: ' + roomId, 'color:#00ff9d; font-family:monospace');
+      console.log('%c✅ Xavu created — ID: ' + roomId, 'color:#00ff9d; font-family:monospace');
 
       this.setupSenderListeners(fileMetas, totalSize, flowToken);
     }, 100);
@@ -835,11 +835,11 @@ export class ZavuApp {
     for (const fileId of fileIds) {
       existing.push({ fileId, expiresAt });
     }
-    localStorage.setItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY, JSON.stringify(existing));
+    localStorage.setItem(XavuApp.CLOUD_CLEANUP_STORAGE_KEY, JSON.stringify(existing));
   }
 
   private getStoredCloudUploads(): Array<{ fileId: string; expiresAt: number }> {
-    const raw = localStorage.getItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY);
+    const raw = localStorage.getItem(XavuApp.CLOUD_CLEANUP_STORAGE_KEY);
     if (!raw) return [];
 
     try {
@@ -850,7 +850,7 @@ export class ZavuApp {
         typeof entry?.fileId === 'string' && typeof entry?.expiresAt === 'number'
       );
     } catch {
-      localStorage.removeItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY);
+      localStorage.removeItem(XavuApp.CLOUD_CLEANUP_STORAGE_KEY);
       return [];
     }
   }
@@ -871,7 +871,7 @@ export class ZavuApp {
       return;
     }
 
-    localStorage.setItem(ZavuApp.CLOUD_CLEANUP_STORAGE_KEY, JSON.stringify(fresh));
+    localStorage.setItem(XavuApp.CLOUD_CLEANUP_STORAGE_KEY, JSON.stringify(fresh));
   }
 
 
