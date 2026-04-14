@@ -422,8 +422,15 @@ export class XavuApp {
           console.log('P2P connection failed, falling back to cloud storage (Pro)');
           this.fallbackToCloudStorage(fileMetas, flowToken);
         } else {
-          UIHelper.updateElement('peer-status', '<span class="text-yellow-400">⏳ Still waiting for receiver…</span>');
-          console.log('P2P connection pending — no cloud fallback (free user or R2 not configured)');
+          UIHelper.updateElement('peer-status', '<span class="text-red-500">?? P2P CONNECTION FAILED</span>');
+          UIHelper.updateElement('sender-progress-text', `
+            ?? Unable to establish P2P connection<br>
+            <span class="text-xs text-zinc-400">
+              Your network may be blocking peer-to-peer connections.<br>
+              Try: different network, disable VPN/firewall, or upgrade to Pro for cloud storage
+            </span>
+          `);
+          console.log('P2P connection failed ? network blocking P2P or restrictive firewall');
         }
       }
     }, 10000); // 10 second timeout
@@ -694,6 +701,20 @@ export class XavuApp {
     this.webrtc.setCurrentPeer(targetId);
 
     this.setupReceiverListeners();
+
+    // Set timeout for receiver connection
+    setTimeout(() => {
+      if (!this.webrtc.getCurrentPeer() || this.webrtc.getCurrentPeer() === targetId) {
+        // Still using the initial targetId means we haven't connected to the actual sender yet
+        UIHelper.updateElementText('receiver-progress-text', `
+          ?? Unable to connect to sender<br>
+          <span class="text-xs text-zinc-500">
+            Your network may be blocking P2P connections.<br>
+            Try a different network or ask sender to use cloud storage via Pro account
+          </span>
+        `);
+      }
+    }, 15000); // 15 second timeout for receiver
   }
 
   private setupReceiverListeners() {
