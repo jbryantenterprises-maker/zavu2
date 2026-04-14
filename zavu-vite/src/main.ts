@@ -53,6 +53,11 @@ function bindUI(app: XavuApp) {
   bindClick('close-signup-btn', () => app.hideAuthModals())
   bindClick('close-reset-btn', () => app.showSignInModal())
 
+  // Plan selection bindings
+  bindClick('select-monthly-btn', () => app.selectPlan('monthly'))
+  bindClick('select-yearly-btn', () => app.selectPlan('yearly'))
+  bindClick('close-plan-btn', () => app.hidePlanModal())
+
   // Form submissions
   bindSubmit('signin-form', async (event) => {
     event.preventDefault()

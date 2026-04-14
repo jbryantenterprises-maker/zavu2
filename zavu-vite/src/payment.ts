@@ -5,7 +5,7 @@ export class PaymentService {
     // Checkout is created server-side in Pages Functions.
   }
 
-  static async upgradeToPro() {
+  static async upgradeToPro(plan: 'monthly' | 'yearly' = 'monthly') {
     const user = AuthService.getUser();
     if (!user) {
       alert("Please sign in first to upgrade to Pro.");
@@ -23,7 +23,9 @@ export class PaymentService {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ plan }),
       });
 
       const result = await response.json() as { success: boolean; checkoutUrl?: string; error?: string };

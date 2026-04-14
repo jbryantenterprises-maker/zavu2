@@ -166,7 +166,20 @@ export class XavuApp {
   }
 
   checkoutPro() {
-    PaymentService.upgradeToPro();
+    this.showPlanModal();
+  }
+
+  showPlanModal() {
+    UIHelper.showElement('plan-modal');
+  }
+
+  hidePlanModal() {
+    UIHelper.hideElement('plan-modal');
+  }
+
+  async selectPlan(plan: 'monthly' | 'yearly') {
+    this.hidePlanModal();
+    await PaymentService.upgradeToPro(plan);
   }
 
   handleProToggle(checkbox: HTMLInputElement, feature: string) {

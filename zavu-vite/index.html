@@ -481,6 +481,87 @@
         </div>
     </div>
 
+    <!-- Plan Selection Modal -->
+    <div id="plan-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div class="max-w-2xl w-full mx-4 bg-zinc-900 rounded-3xl p-8">
+            <h2 class="text-3xl font-semibold mb-2 text-center">Choose Your Plan</h2>
+            <p class="text-zinc-400 text-center mb-8">Unlock unlimited file transfers and encrypted cloud storage</p>
+            
+            <div class="grid md:grid-cols-2 gap-6 mb-8">
+                <!-- Monthly Plan -->
+                <div class="bg-zinc-800 border border-zinc-700 rounded-2xl p-6 hover:border-emerald-400 transition-colors">
+                    <div class="text-center mb-4">
+                        <h3 class="text-xl font-semibold text-white mb-2">Monthly</h3>
+                        <div class="text-3xl font-bold text-emerald-400">$9<span class="text-lg text-zinc-400">/month</span></div>
+                    </div>
+                    <ul class="space-y-2 text-sm text-zinc-300 mb-6">
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Unlimited file transfers
+                        </li>
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Encrypted cloud storage (7 days)
+                        </li>
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Password protection
+                        </li>
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Priority support
+                        </li>
+                    </ul>
+                    <button id="select-monthly-btn"
+                        class="w-full bg-zinc-700 hover:bg-emerald-500 hover:text-black text-white font-semibold py-3 rounded-2xl transition-colors">
+                        Select Monthly
+                    </button>
+                </div>
+                
+                <!-- Yearly Plan -->
+                <div class="bg-gradient-to-br from-emerald-900/30 to-zinc-800 border border-emerald-400/30 rounded-2xl p-6 hover:border-emerald-400 transition-colors relative">
+                    <div class="absolute top-2 right-2 bg-emerald-400 text-black text-xs px-2 py-1 rounded-full font-semibold">
+                        SAVE 18%
+                    </div>
+                    <div class="text-center mb-4">
+                        <h3 class="text-xl font-semibold text-white mb-2">Yearly</h3>
+                        <div class="text-3xl font-bold text-emerald-400">$89<span class="text-lg text-zinc-400">/year</span></div>
+                    </div>
+                    <ul class="space-y-2 text-sm text-zinc-300 mb-6">
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Everything in Monthly
+                        </li>
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            2 months free
+                        </li>
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Priority webhook processing
+                        </li>
+                        <li class="flex items-center gap-x-2">
+                            <span class="text-emerald-400">?</span>
+                            Early access to new features
+                        </li>
+                    </ul>
+                    <button id="select-yearly-btn"
+                        class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-3 rounded-2xl transition-colors">
+                        Select Yearly
+                    </button>
+                </div>
+            </div>
+            
+            <div class="text-center">
+                <button id="close-plan-btn"
+                    class="text-zinc-400 hover:text-white text-sm transition-colors">
+                    Maybe later
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
 </body>
 
