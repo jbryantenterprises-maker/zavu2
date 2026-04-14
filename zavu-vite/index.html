@@ -31,20 +31,15 @@
                     ⇄</div>
                 <h1 class="logo-font text-3xl tracking-tighter">Xavu</h1>
             </div>
-            <div class="flex items-center gap-x-8 text-sm font-medium">
-                <a href="#" id="how-it-works-link" class="hover:text-emerald-400 transition-colors">How it works</a>
+            <div class="flex items-center gap-x-4 sm:gap-x-8 text-sm font-medium">
+                <a href="#" id="how-it-works-link" class="hover:text-emerald-400 transition-colors hidden sm:block">How it works</a>
                 <a href="#" id="copy-code-link"
-                    class="hover:text-emerald-400 transition-colors flex items-center gap-x-1">
+                    class="hover:text-emerald-400 transition-colors flex items-center gap-x-1 hidden sm:block">
                     <span class="text-emerald-400">★</span>
                     <span>Zero storage • Pure P2P</span>
                 </a>
-                <div
-                    class="flex items-center gap-x-2 bg-zinc-900 text-emerald-400 text-xs px-4 py-2 rounded-3xl border border-emerald-400/30">
-                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                    LIVE P2P
-                </div>
                 <!-- AUTH MOUNT -->
-                <div id="auth-section" class="flex items-center gap-x-4 border-l border-zinc-800 pl-8 ml-2">
+                <div id="auth-section" class="flex items-center gap-x-2 sm:gap-x-4 border-l border-zinc-800 pl-4 sm:pl-8 ml-1 sm:ml-2">
                     <span id="user-name" class="hidden text-zinc-300"></span>
                     <button id="auth-btn" class="hover:text-emerald-400 transition-colors">Sign In</button>
                     <button id="upgrade-btn" class="hidden bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 rounded-3xl font-semibold transition-transform hover:scale-105">Upgrade to Pro</button>
@@ -58,18 +53,18 @@
         <!-- HERO / LANDING -->
         <div id="landing-screen" class="text-center mb-16">
             
-            <h2 class="text-6xl font-semibold tracking-tighter leading-none mb-6 logo-font">
+            <h2 class="text-4xl sm:text-6xl font-semibold tracking-tighter leading-none mb-6 logo-font">
                 Send huge files.<br>
                 <span class="text-emerald-400">Directly.</span> No servers.
             </h2>
-            <p class="text-xl text-zinc-400 max-w-lg mx-auto mb-10">
+            <p class="text-lg sm:text-xl text-zinc-400 max-w-lg mx-auto mb-8 sm:mb-10">
                 Drag &amp; drop → get a magic link → email it.<br>
                 Your file never touches any server. Pure browser-to-browser WebRTC.
             </p>
 
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
                 <button id="start-sending-btn"
-                    class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xl px-10 py-6 rounded-3xl flex items-center gap-x-3 transition-all active:scale-95">
+                    class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-lg sm:text-xl px-8 py-4 sm:px-10 sm:py-6 rounded-3xl flex items-center gap-x-3 transition-all active:scale-95">
                     <span>📤</span>
                     SEND FILES (I'm the sender)
                 </button>
@@ -77,8 +72,8 @@
                 <div class="text-zinc-500 text-sm font-medium">or</div>
 
                 <button id="paste-link-btn"
-                    class="border border-zinc-400 hover:border-white font-medium text-xl px-10 py-6 rounded-3xl flex items-center gap-x-3 transition-all">
-                    <span>📥</span>
+                    class="border border-zinc-400 hover:border-white font-medium text-lg sm:text-xl px-8 py-4 sm:px-10 sm:py-6 rounded-3xl flex items-center gap-x-3 transition-all">
+                    <span>?</span>
                     I have a link (receiver)
                 </button>
             </div>
