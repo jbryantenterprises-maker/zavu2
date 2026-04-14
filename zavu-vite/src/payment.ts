@@ -28,15 +28,23 @@ export class PaymentService {
         body: JSON.stringify({ plan }),
       });
 
+      console.log('Checkout request sent:', { plan, status: response.status });
+      
       const result = await response.json() as { success: boolean; checkoutUrl?: string; error?: string };
+      console.log('Checkout response:', result);
+      
       if (!response.ok || !result.success || !result.checkoutUrl) {
-        throw new Error(result.error || `Checkout failed (HTTP ${response.status})`);
+        const errorMsg = result.error || `Checkout failed (HTTP ${response.status})`;
+        console.error('Checkout API error:', errorMsg, result);
+        throw new Error(errorMsg);
       }
 
       window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
     } catch (e) {
       console.error("Failed to trigger checkout", e);
-      alert("Unable to start checkout right now.");
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error occurred';
+      console.error('Checkout error details:', errorMessage);
+      alert(`Unable to start checkout right now. ${errorMessage}`);
     }
   }
 }
