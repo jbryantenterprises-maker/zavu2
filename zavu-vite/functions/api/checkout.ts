@@ -33,7 +33,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // Check for required environment variables
   if (!env.LEMON_SQUEEZY_STORE_ID) {
-    return Response.json({ success: false, error: 'Checkout is not configured' }, { status: 500 });
+    console.error('Missing LEMON_SQUEEZY_STORE_ID');
+    return Response.json({ success: false, error: 'Checkout is not configured - missing store ID' }, { status: 500 });
   }
 
   // Parse request body to get plan selection
@@ -50,6 +51,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // Select variant based on plan and available environment variables
   let variantId: string;
   
+  console.log('Available environment variables:', {
+    monthlyId: env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID,
+    yearlyId: env.LEMON_SQUEEZY_YEARLY_VARIANT_ID,
+    proId: env.LEMON_SQUEEZY_PRO_VARIANT_ID
+  });
+  
   if (env.LEMON_SQUEEZY_MONTHLY_VARIANT_ID && env.LEMON_SQUEEZY_YEARLY_VARIANT_ID) {
     // New configuration with separate monthly/yearly variants
     variantId = plan === 'yearly' 
@@ -62,7 +69,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     console.log('Using fallback variant configuration:', { plan, variantId });
   } else {
     console.error('No variant IDs configured in environment');
-    return Response.json({ success: false, error: 'Checkout variants not configured' }, { status: 500 });
+    return Response.json({ 
+      success: false, 
+      error: 'Checkout variants not configured - missing variant IDs' 
+    }, { status: 500 });
   }
 
   const checkoutUrl =
