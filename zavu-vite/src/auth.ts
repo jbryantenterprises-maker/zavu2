@@ -47,32 +47,7 @@ export class AuthService {
     
     onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Use localStorage as a fast cache for initial render, then verify
-        // authoritatively via Firebase custom claims from the JWT.
-        // The billing webhook sets custom claims (e.g. { pro: true })
-        // on the Firebase user after checkout/subscription updates.
-        let isPro = localStorage.getItem(`xavu_pro_${firebaseUser.uid}`) === "true";
-        
-        try {
-          const tokenResult = await firebaseUser.getIdTokenResult();
-          const claims = tokenResult.claims;
-          isPro = !!(
-            claims.pro ||
-            claims.stripeRole === 'pro' ||
-            claims.plan === 'pro'
-          );
-          // Update cache to match authoritative value
-          localStorage.setItem(`xavu_pro_${firebaseUser.uid}`, isPro ? "true" : "false");
-        } catch (e) {
-          console.warn("Failed to fetch token claims, using cached Pro status:", e);
-        }
-        
-        this.user = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          isPro
-        };
+        await this.syncUserFromFirebase(firebaseUser);
       } else {
         this.user = null;
       }
@@ -207,9 +182,40 @@ export class AuthService {
     const currentUser = auth.currentUser;
     if (!currentUser) return null;
     try {
-      return await currentUser.getIdToken(forceRefresh);
+      const token = await currentUser.getIdToken(forceRefresh);
+      await this.syncUserFromFirebase(currentUser, forceRefresh);
+      this.notifyListeners();
+      return token;
     } catch {
       return null;
     }
+  }
+
+  private static async syncUserFromFirebase(firebaseUser: FirebaseUser, forceRefresh = false): Promise<void> {
+    // Use localStorage as a fast cache for initial render, then verify
+    // authoritatively via Firebase custom claims from the JWT.
+    // The billing webhook sets custom claims (e.g. { pro: true })
+    // on the Firebase user after checkout/subscription updates.
+    let isPro = localStorage.getItem(`xavu_pro_${firebaseUser.uid}`) === "true";
+
+    try {
+      const tokenResult = await firebaseUser.getIdTokenResult(forceRefresh);
+      const claims = tokenResult.claims;
+      isPro = !!(
+        claims.pro ||
+        claims.stripeRole === 'pro' ||
+        claims.plan === 'pro'
+      );
+      localStorage.setItem(`xavu_pro_${firebaseUser.uid}`, isPro ? "true" : "false");
+    } catch (e) {
+      console.warn("Failed to fetch token claims, using cached Pro status:", e);
+    }
+
+    this.user = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      isPro
+    };
   }
 }
