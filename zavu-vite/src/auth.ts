@@ -49,8 +49,8 @@ export class AuthService {
       if (firebaseUser) {
         // Use localStorage as a fast cache for initial render, then verify
         // authoritatively via Firebase custom claims from the JWT.
-        // The Lemon Squeezy webhook must set custom claims (e.g. { pro: true })
-        // on the Firebase user via the Admin SDK after purchase.
+        // The billing webhook sets custom claims (e.g. { pro: true })
+        // on the Firebase user after checkout/subscription updates.
         let isPro = localStorage.getItem(`xavu_pro_${firebaseUser.uid}`) === "true";
         
         try {
@@ -199,11 +199,15 @@ export class AuthService {
    * Returns null if no user is signed in.
    */
   static async getIdToken(): Promise<string | null> {
+    return this.refreshIdToken();
+  }
+
+  static async refreshIdToken(forceRefresh = false): Promise<string | null> {
     if (!auth) return null;
     const currentUser = auth.currentUser;
     if (!currentUser) return null;
     try {
-      return await currentUser.getIdToken();
+      return await currentUser.getIdToken(forceRefresh);
     } catch {
       return null;
     }

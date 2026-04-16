@@ -33,6 +33,7 @@ export class XavuApp {
   private fileReceiver: FileReceiver | null = null;
   private currentReceivingFileIndex: number = 0;
   private activeDownloadLink: string | null = null;
+  private checkoutStatusHandled: boolean = false;
   /** Tracks whether the current transfer is a cloud upload (for context-aware UI) */
   private isCloudTransfer: boolean = false;
   /** Stores cloud download URLs for proper copy/email */
@@ -52,6 +53,7 @@ export class XavuApp {
 
   private init() {
     this.setupEventListeners();
+    this.handleBillingReturnState();
     this.checkForCloudDownload() || this.checkForReceiverLink();
     this.setupBeforeUnload();
 
@@ -74,6 +76,7 @@ export class XavuApp {
     if (user) {
       if (authBtn) authBtn.textContent = 'Sign Out';
       UIHelper.showElement('user-name');
+      UIHelper.showElement('manage-billing-btn');
       UIHelper.updateElementText('user-name', user.displayName || user.email || 'You');
       
       if (user.isPro) {
@@ -87,6 +90,7 @@ export class XavuApp {
       if (authBtn) authBtn.textContent = 'Sign In';
       UIHelper.hideElement('upgrade-btn');
       UIHelper.hideElement('pro-badge');
+      UIHelper.hideElement('manage-billing-btn');
       UIHelper.hideElement('user-name');
     }
   }
@@ -169,6 +173,10 @@ export class XavuApp {
     this.showPlanModal();
   }
 
+  manageBilling() {
+    void PaymentService.openBillingPortal();
+  }
+
   showPlanModal() {
     UIHelper.showElement('plan-modal');
   }
@@ -180,6 +188,51 @@ export class XavuApp {
   async selectPlan(plan: 'monthly' | 'yearly') {
     this.hidePlanModal();
     await PaymentService.upgradeToPro(plan);
+  }
+
+  private handleBillingReturnState() {
+    if (this.checkoutStatusHandled) return;
+    this.checkoutStatusHandled = true;
+
+    const url = new URL(window.location.href);
+    const checkout = url.searchParams.get('checkout');
+    const billing = url.searchParams.get('billing');
+
+    if (checkout === 'success') {
+      this.showBillingMessage('Checkout complete. Your Pro access will update after Stripe confirms the subscription.', 'success');
+      UIHelper.confettiBurst();
+      void AuthService.refreshIdToken(true);
+    } else if (checkout === 'cancelled') {
+      this.showBillingMessage('Checkout was cancelled. You can try again whenever you want.', 'info');
+    } else if (billing === 'returned') {
+      this.showBillingMessage('Returned from the billing portal.', 'info');
+      void AuthService.refreshIdToken(true);
+    }
+
+    if (checkout || billing) {
+      url.searchParams.delete('checkout');
+      url.searchParams.delete('billing');
+      window.history.replaceState({}, document.title, url.toString());
+    }
+  }
+
+  private showBillingMessage(message: string, tone: 'success' | 'info') {
+    UIHelper.updateElementText('billing-status-text', message);
+    UIHelper.removeClass(
+      'billing-status',
+      'hidden',
+      'border-emerald-400/30',
+      'bg-emerald-400/10',
+      'text-emerald-300',
+      'border-zinc-700',
+      'bg-zinc-900',
+      'text-zinc-200'
+    );
+    if (tone === 'success') {
+      UIHelper.addClass('billing-status', 'border-emerald-400/30', 'bg-emerald-400/10', 'text-emerald-300');
+    } else {
+      UIHelper.addClass('billing-status', 'border-zinc-700', 'bg-zinc-900', 'text-zinc-200');
+    }
   }
 
   handleProToggle(checkbox: HTMLInputElement, feature: string) {

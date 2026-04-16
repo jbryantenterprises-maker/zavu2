@@ -5,6 +5,40 @@ export class PaymentService {
     // Checkout is created server-side in Pages Functions.
   }
 
+  static async openBillingPortal() {
+    const user = AuthService.getUser();
+    if (!user) {
+      alert("Please sign in first to manage billing.");
+      return;
+    }
+
+    try {
+      const idToken = await AuthService.getIdToken();
+      if (!idToken) {
+        alert("Please sign in again to continue.");
+        return;
+      }
+
+      const response = await fetch('/api/billing-portal', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+        },
+      });
+
+      const result = await response.json() as { success: boolean; url?: string; error?: string };
+      if (!response.ok || !result.success || !result.url) {
+        throw new Error(result.error || `Billing portal failed (HTTP ${response.status})`);
+      }
+
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      console.error("Failed to open billing portal", e);
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error occurred';
+      alert(`Unable to open billing portal right now. ${errorMessage}`);
+    }
+  }
+
   static async upgradeToPro(plan: 'monthly' | 'yearly' = 'monthly') {
     const user = AuthService.getUser();
     if (!user) {

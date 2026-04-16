@@ -39,8 +39,8 @@ export async function verifyFirebaseJWT(
     if (!uid) return null;
 
     // Check for Pro status via Firebase custom claims.
-    // Your Lemon Squeezy webhook should set a custom claim like { pro: true }
-    // on the Firebase user after purchase.
+    // The billing webhook should set a custom claim like { pro: true }
+    // on the Firebase user after purchase or subscription updates.
     const isPro = !!(
       (payload as any).pro ||
       (payload as any).stripeRole === 'pro' ||

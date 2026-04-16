@@ -23,6 +23,7 @@ function bindUI(app: XavuApp) {
   })
   bindClick('auth-btn', () => app.handleAuthClick())
   bindClick('upgrade-btn', () => app.checkoutPro())
+  bindClick('manage-billing-btn', () => app.manageBilling())
   bindClick('start-sending-btn', () => app.startSending())
   bindClick('paste-link-btn', () => app.pasteLink())
   bindClick('cancel-transfer-btn', () => app.cancelTransfer())

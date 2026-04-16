@@ -8,7 +8,7 @@ export function mockCheckoutMiddleware() {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({
         success: true,
-        checkoutUrl: 'https://331412.lemonsqueezy.com/checkout/buy/1529390'
+        checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_mock_xavu_pro'
       }));
       return;
     }

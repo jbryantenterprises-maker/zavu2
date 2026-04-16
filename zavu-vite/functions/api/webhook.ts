@@ -1,113 +1,82 @@
+import { setProStatus } from './_firebase-admin';
+
 interface Env {
   FIREBASE_PROJECT_ID: string;
-  LEMON_SQUEEZY_WEBHOOK_SECRET: string;
+  STRIPE_WEBHOOK_SECRET: string;
   FIREBASE_SERVICE_ACCOUNT_KEY: string;
 }
 
-// Helper function to convert hex string to Uint8Array
-function hexToUint8Array(hex: string): Uint8Array {
-  const result = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    result[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return result;
+interface StripeEvent {
+  id: string;
+  type: string;
+  data: {
+    object: Record<string, unknown>;
+  };
 }
 
-interface LemonSqueezyWebhookEvent {
-  data: {
-    type: string;
-    id: string;
-    attributes: {
-      status: string;
-      order_id: number;
-      product_id: number;
-      variant_id: number;
-      user_id?: string;
-      customer_email: string;
-      created_at: string;
-      updated_at: string;
-    };
-  };
-  meta: {
-    event_name: string;
-    custom_data?: {
-      user_id?: string;
-    };
-  };
+interface StripeMetadataCarrier {
+  client_reference_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface StripeCheckoutSession extends StripeMetadataCarrier {
+  mode?: string;
+  payment_status?: string;
+}
+
+interface StripeSubscription extends StripeMetadataCarrier {
+  status: string;
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    // Verify webhook signature
-    const signature = request.headers.get('X-Lemon-Squeezy-Signature');
+    const signature = request.headers.get('Stripe-Signature');
     if (!signature) {
       console.error('Missing webhook signature');
       return new Response('Invalid signature', { status: 401 });
     }
 
     const body = await request.text();
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(env.LEMON_SQUEEZY_WEBHOOK_SECRET),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
-
-    const isValid = await crypto.subtle.verify(
-      'HMAC',
-      cryptoKey,
-      hexToUint8Array(signature),
-      new TextEncoder().encode(body)
-    );
-
+    const isValid = await verifyStripeSignature(body, signature, env.STRIPE_WEBHOOK_SECRET);
     if (!isValid) {
       console.error('Invalid webhook signature');
       return new Response('Invalid signature', { status: 401 });
     }
 
-    const event: LemonSqueezyWebhookEvent = JSON.parse(body);
-    console.log('Webhook event received:', event.meta.event_name);
+    const event = JSON.parse(body) as StripeEvent;
+    console.log('Webhook event received:', event.type);
 
-    // Handle different event types
-    switch (event.meta.event_name) {
-      case 'order_created':
-      case 'subscription_created':
+    switch (event.type) {
+      case 'checkout.session.completed':
         await handleSuccessfulPayment(event, env);
         break;
-
-      case 'subscription_updated':
+      case 'customer.subscription.updated':
         await handleSubscriptionUpdate(event, env);
         break;
-
-      case 'subscription_cancelled':
-      case 'subscription_expired':
+      case 'customer.subscription.deleted':
         await handleSubscriptionCancellation(event, env);
         break;
-
       default:
-        console.log('Unhandled webhook event:', event.meta.event_name);
+        console.log('Unhandled webhook event:', event.type);
     }
 
     return new Response('OK', { status: 200 });
-
   } catch (error) {
     console.error('Webhook error:', error);
     return new Response('Internal Server Error', { status: 500 });
   }
 };
 
-async function handleSuccessfulPayment(event: LemonSqueezyWebhookEvent, env: Env) {
-  const userId = event.meta.custom_data?.user_id;
-  
+async function handleSuccessfulPayment(event: StripeEvent, env: Env) {
+  const session = event.data.object as StripeCheckoutSession;
+  const userId = getUserIdFromMetadata(session);
   if (!userId) {
-    console.error('No user_id found in webhook custom data');
+    console.error('No user_id found in Stripe checkout session metadata');
     return;
   }
 
-  // Only grant Pro status for successful payments
-  if (event.data.attributes.status !== 'paid') {
-    console.log('Payment not completed, status:', event.data.attributes.status);
+  if (session.payment_status && session.payment_status !== 'paid' && session.mode !== 'subscription') {
+    console.log('Payment not completed, payment_status:', session.payment_status);
     return;
   }
 
@@ -115,25 +84,24 @@ async function handleSuccessfulPayment(event: LemonSqueezyWebhookEvent, env: Env
   await setProStatus(userId, true, env);
 }
 
-async function handleSubscriptionUpdate(event: LemonSqueezyWebhookEvent, env: Env) {
-  const userId = event.meta.custom_data?.user_id;
-  
+async function handleSubscriptionUpdate(event: StripeEvent, env: Env) {
+  const subscription = event.data.object as StripeSubscription;
+  const userId = getUserIdFromMetadata(subscription);
   if (!userId) {
-    console.error('No user_id found in webhook custom data');
+    console.error('No user_id found in Stripe subscription metadata');
     return;
   }
 
-  // Check if subscription is still active
-  const isActive = event.data.attributes.status === 'active';
+  const isActive = ['active', 'trialing', 'past_due'].includes(subscription.status);
   console.log(`Updating Pro status for user ${userId}: ${isActive}`);
   await setProStatus(userId, isActive, env);
 }
 
-async function handleSubscriptionCancellation(event: LemonSqueezyWebhookEvent, env: Env) {
-  const userId = event.meta.custom_data?.user_id;
-  
+async function handleSubscriptionCancellation(event: StripeEvent, env: Env) {
+  const subscription = event.data.object as StripeSubscription;
+  const userId = getUserIdFromMetadata(subscription);
   if (!userId) {
-    console.error('No user_id found in webhook custom data');
+    console.error('No user_id found in Stripe subscription metadata');
     return;
   }
 
@@ -141,109 +109,69 @@ async function handleSubscriptionCancellation(event: LemonSqueezyWebhookEvent, e
   await setProStatus(userId, false, env);
 }
 
-async function setProStatus(userId: string, isPro: boolean, env: Env) {
-  try {
-    // Get Firebase Admin SDK service account key from environment
-    const serviceAccountKey = env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (!serviceAccountKey) {
-      console.error('Missing FIREBASE_SERVICE_ACCOUNT_KEY environment variable');
-      return;
-    }
-
-    // Parse service account key
-    const serviceAccount = JSON.parse(serviceAccountKey);
-    
-    // Get Firebase ID token
-    const token = await getFirebaseAccessToken(serviceAccount);
-    
-    // Set custom claim
-    const response = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/accounts:update`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          localId: userId,
-          customAttributes: JSON.stringify({ pro: isPro }),
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Failed to set custom claim:', error);
-      return;
-    }
-
-    console.log(`Successfully ${isPro ? 'granted' : 'revoked'} Pro status for user: ${userId}`);
-
-  } catch (error) {
-    console.error('Error setting Pro status:', error);
+async function verifyStripeSignature(body: string, signatureHeader: string, secret: string): Promise<boolean> {
+  const parsed = parseStripeSignature(signatureHeader);
+  if (!parsed.timestamp || parsed.v1.length === 0) {
+    return false;
   }
-}
 
-async function getFirebaseAccessToken(serviceAccount: any): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const expiry = now + 3600; // 1 hour
+  const ageInSeconds = Math.abs(Math.floor(Date.now() / 1000) - parsed.timestamp);
+  if (ageInSeconds > 300) {
+    console.error('Stripe webhook signature timestamp is outside tolerance');
+    return false;
+  }
 
-  const header = {
-    alg: 'RS256',
-    typ: 'JWT',
-    kid: serviceAccount.private_key_id,
-  };
-
-  const payload = {
-    iss: serviceAccount.client_email,
-    scope: 'https://www.googleapis.com/auth/firebase.auth',
-    aud: 'https://www.googleapis.com/oauth2/v4/token',
-    exp: expiry,
-    iat: now,
-  };
-
-  // Create JWT
-  const token = await createJWT(header, payload, serviceAccount.private_key);
-
-  // Exchange for access token
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: token,
-    }),
-  });
-
-  const result = await response.json() as { access_token: string };
-  return result.access_token;
-}
-
-async function createJWT(header: any, payload: any, privateKey: string): Promise<string> {
-  const encoder = new TextEncoder();
-  
-  // Encode header and payload
-  const headerBase64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  const payloadBase64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  
-  // Create signature
-  const data = `${headerBase64}.${payloadBase64}`;
+  const payload = `${parsed.timestamp}.${body}`;
   const key = await crypto.subtle.importKey(
-    'pkcs8',
-    new TextEncoder().encode(privateKey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n/g, '')),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
   );
-  
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, encoder.encode(data));
-  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-  
-  return `${data}.${signatureBase64}`;
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+  const expected = bufferToHex(signature);
+
+  return parsed.v1.some(candidate => timingSafeEqual(candidate, expected));
+}
+
+function parseStripeSignature(header: string): { timestamp: number | null; v1: string[] } {
+  const parsed = { timestamp: null as number | null, v1: [] as string[] };
+
+  for (const part of header.split(',')) {
+    const [key, value] = part.split('=', 2);
+    if (key === 't') {
+      parsed.timestamp = Number(value);
+    } else if (key === 'v1' && value) {
+      parsed.v1.push(value);
+    }
+  }
+
+  return parsed;
+}
+
+function getUserIdFromMetadata(object: StripeMetadataCarrier): string | null {
+  const metadataUserId = object.metadata?.user_id;
+  if (typeof metadataUserId === 'string' && metadataUserId.length > 0) {
+    return metadataUserId;
+  }
+
+  if (typeof object.client_reference_id === 'string' && object.client_reference_id.length > 0) {
+    return object.client_reference_id;
+  }
+
+  return null;
+}
+
+function bufferToHex(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }

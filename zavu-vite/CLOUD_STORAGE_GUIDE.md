@@ -41,8 +41,11 @@ In the Cloudflare Dashboard under your Pages project → **Settings → Environm
 | `R2_SECRET_ACCESS_KEY` | R2 API token secret for presigning | Production + Preview |
 | `R2_BUCKET_NAME` | Bucket name, for example `zavu-uploads` | Production + Preview |
 | `CLEANUP_API_TOKEN` | Random secret for `/api/cleanup-expired` | Production + Preview |
-| `LEMON_SQUEEZY_STORE_ID` | Lemon Squeezy store subdomain/ID | Production + Preview |
-| `LEMON_SQUEEZY_PRO_VARIANT_ID` | Pro checkout variant ID | Production + Preview |
+| `STRIPE_SECRET_KEY` | Stripe secret API key | Production + Preview |
+| `STRIPE_MONTHLY_PRICE_ID` | Stripe monthly subscription price ID | Production + Preview |
+| `STRIPE_YEARLY_PRICE_ID` | Stripe yearly subscription price ID | Production + Preview |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | Production + Preview |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Firebase service account JSON for custom-claim updates | Production + Preview |
 
 Generate a signing secret:
 ```bash
@@ -86,7 +89,9 @@ To auto-delete files after 7 days and prevent storage cost growth:
 | `functions/api/download/[id].ts` | `GET /api/download/:id` — signed file download from R2 |
 | `functions/api/delete.ts` | `POST /api/delete` — authenticated owner delete for uploaded files |
 | `functions/api/cleanup-expired.ts` | `POST /api/cleanup-expired` — token-protected batch cleanup endpoint |
-| `functions/api/checkout.ts` | `POST /api/checkout` — authenticated Lemon Squeezy checkout URL creation |
+| `functions/api/checkout.ts` | `POST /api/checkout` — authenticated Stripe Checkout session creation |
+| `functions/api/billing-portal.ts` | `POST /api/billing-portal` — authenticated Stripe billing portal session creation |
+| `functions/api/webhook.ts` | `POST /api/webhook` — Stripe webhook verification + Firebase Pro claim updates |
 | `src/cloud-storage.ts` | Frontend client — calls `/api/upload` with Firebase JWT |
 | `wrangler.toml` | R2 bucket binding configuration |
 
@@ -114,6 +119,15 @@ curl -X POST \
   -H "X-Cleanup-Token: $CLEANUP_API_TOKEN" \
   "https://your-domain.example/api/cleanup-expired?limit=250"
 ```
+
+## Stripe Checklist
+
+1. Create one monthly recurring price and one yearly recurring price in Stripe.
+2. Add `STRIPE_SECRET_KEY`, `STRIPE_MONTHLY_PRICE_ID`, `STRIPE_YEARLY_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, and `FIREBASE_SERVICE_ACCOUNT_KEY` to Cloudflare Pages environment variables.
+3. Configure a Stripe webhook endpoint at `https://your-domain.example/api/webhook`.
+4. Subscribe the webhook to `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+5. Run a Stripe test checkout and confirm the Firebase user receives the `pro` custom claim.
+6. Sign in as that same user and verify `Manage Billing` opens a Stripe billing portal session.
 
 ## Cost Estimate
 
