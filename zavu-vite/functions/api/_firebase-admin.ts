@@ -53,7 +53,7 @@ async function getFirebaseAccessToken(serviceAccount: FirebaseServiceAccount): P
   const privateKey = await importPKCS8(serviceAccount.private_key, 'RS256');
 
   const assertion = await new SignJWT({
-    scope: 'https://www.googleapis.com/auth/firebase.auth',
+    scope: 'https://www.googleapis.com/auth/identitytoolkit',
   })
     .setProtectedHeader({
       alg: 'RS256',
