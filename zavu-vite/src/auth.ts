@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, type FirebaseApp } from "firebase/app";
 import { 
   getAuth, 
   createUserWithEmailAndPassword,
@@ -20,7 +20,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-export let app;
+export let app: FirebaseApp | undefined;
 let auth: ReturnType<typeof getAuth>;
 
 try {

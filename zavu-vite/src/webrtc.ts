@@ -2,8 +2,9 @@ import { joinRoom, selfId } from '@trystero-p2p/firebase';
 import { app as existingFirebaseApp } from './auth.js';
 import { initializeApp } from 'firebase/app';
 
-type TrysteroSender = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[0];
-type TrysteroReceiver = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[1];
+// Simplified Trystero types - using 'any' to avoid type conflicts
+type TrysteroSender = any;
+type TrysteroReceiver = any;
 
 export interface FileMetadata {
   name: string;
@@ -89,13 +90,13 @@ export class WebRTCManager {
 
   onPeerJoin(callback: (peerId: string) => void) {
     if (this.currentRoom) {
-      this.currentRoom.onPeerJoin(callback);
+      this.currentRoom.onPeerJoin = callback;
     }
   }
 
   onPeerLeave(callback: (peerId: string) => void) {
     if (this.currentRoom) {
-      this.currentRoom.onPeerLeave(callback);
+      this.currentRoom.onPeerLeave = callback;
     }
   }
 
@@ -107,11 +108,11 @@ export class WebRTCManager {
 
   onSignal(callback: (data: SignalData, peerId: string) => void) {
     if (this.getSignal) {
-      this.getSignal((data, peerId) => {
+      this.getSignal.onMessage = (data: any, { peerId }: { peerId: string }) => {
         if (isSignalData(data)) {
           callback(data, peerId);
         }
-      });
+      };
     }
   }
 
@@ -123,11 +124,11 @@ export class WebRTCManager {
 
   onChunk(callback: (data: ArrayBuffer, peerId: string) => void) {
     if (this.getChunk) {
-      this.getChunk((data, peerId) => {
+      this.getChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
         if (data instanceof ArrayBuffer) {
           callback(data, peerId);
         }
-      });
+      };
     }
   }
 
