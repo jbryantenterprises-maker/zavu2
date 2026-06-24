@@ -36,6 +36,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return new Response('Invalid signature', { status: 401 });
     }
 
+    if (!env.STRIPE_WEBHOOK_SECRET) {
+      console.error('Missing STRIPE_WEBHOOK_SECRET');
+      return new Response('Webhook is not configured', { status: 500 });
+    }
+
     const body = await request.text();
     const isValid = await verifyStripeSignature(body, signature, env.STRIPE_WEBHOOK_SECRET);
     if (!isValid) {
@@ -50,6 +55,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case 'checkout.session.completed':
         await handleSuccessfulPayment(event, env);
         break;
+      case 'customer.subscription.created':
       case 'customer.subscription.updated':
         await handleSubscriptionUpdate(event, env);
         break;
@@ -75,7 +81,13 @@ async function handleSuccessfulPayment(event: StripeEvent, env: Env) {
     return;
   }
 
-  if (session.payment_status && session.payment_status !== 'paid' && session.mode !== 'subscription') {
+  const paidOrTrial = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+  if (session.mode === 'subscription' && !paidOrTrial) {
+    console.log('Checkout completed without paid or trialing status:', session.payment_status);
+    return;
+  }
+
+  if (session.mode !== 'subscription' && session.payment_status !== 'paid') {
     console.log('Payment not completed, payment_status:', session.payment_status);
     return;
   }
@@ -92,7 +104,8 @@ async function handleSubscriptionUpdate(event: StripeEvent, env: Env) {
     return;
   }
 
-  const isActive = ['active', 'trialing', 'past_due'].includes(subscription.status);
+  const proEligibleStatuses = new Set(['active', 'trialing', 'past_due']);
+  const isActive = proEligibleStatuses.has(subscription.status);
   console.log(`Updating Pro status for user ${userId}: ${isActive}`);
   await setProStatus(userId, isActive, env);
 }

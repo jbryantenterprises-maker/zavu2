@@ -7,9 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const app = new XavuApp()
 
   bindUI(app)
-  
-  console.log('%cXavu v2.0 — Vite + TypeScript P2P File Transfer', 'background:#00ff9d;color:#000;font-weight:bold;padding:2px 6px;border-radius:3px')
-  console.log('No central storage. Pure peer-to-peer over WebRTC. Privacy first.')
 })
 
 function bindUI(app: XavuApp) {

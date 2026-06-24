@@ -125,7 +125,7 @@ curl -X POST \
 1. Create one monthly recurring price and one yearly recurring price in Stripe.
 2. Add `STRIPE_SECRET_KEY`, `STRIPE_MONTHLY_PRICE_ID`, `STRIPE_YEARLY_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, and `FIREBASE_SERVICE_ACCOUNT_KEY` to Cloudflare Pages environment variables.
 3. Configure a Stripe webhook endpoint at `https://your-domain.example/api/webhook`.
-4. Subscribe the webhook to `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+4. Subscribe the webhook to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.
 5. Run a Stripe test checkout and confirm the Firebase user receives the `pro` custom claim.
 6. Sign in as that same user and verify `Manage Billing` opens a Stripe billing portal session.
 

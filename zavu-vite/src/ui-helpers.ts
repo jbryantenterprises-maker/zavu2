@@ -49,8 +49,8 @@ export class UIHelper {
   }
 
   static emailLink(link: string): void {
-    const subject = encodeURIComponent("I sent you a file via Xavu (no servers!)");
-    const body = encodeURIComponent(`Hey!\n\nI just created a direct P2P link for you. Click it while I have the tab open:\n\n${link}\n\nFile will transfer straight from my browser to yours. No cloud. No storage.\n\nEnjoy!`);
+    const subject = encodeURIComponent("I sent you a direct P2P file link via Xavu");
+    const body = encodeURIComponent(`Hey!\n\nI just created a direct P2P transfer link for you. Click it while I have the tab open:\n\n${link}\n\nThe file transfers straight from my browser to yours. This live P2P link does not upload the file to an encrypted cloud link.\n\nEnjoy!`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
@@ -58,7 +58,7 @@ export class UIHelper {
     const subject = encodeURIComponent("I sent you a file via Xavu");
     const linkList = links.join('\n');
     const plural = links.length > 1 ? 's are' : ' is';
-    const body = encodeURIComponent(`Hey!\n\nI uploaded a file for you. Use the link${links.length > 1 ? 's' : ''} below to download:\n\n${linkList}\n\nThe link${plural} valid for 7 days. Files are end-to-end encrypted — no one else can access them.\n\nEnjoy!`);
+    const body = encodeURIComponent(`Hey!\n\nI created an encrypted Xavu cloud link${links.length > 1 ? 's' : ''} for you. Use the link${links.length > 1 ? 's' : ''} below to download:\n\n${linkList}\n\nThe link${plural} valid for 7 days. Files are encrypted before upload and require the full link to decrypt.\n\nEnjoy!`);
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   }
 
@@ -87,7 +87,16 @@ export class UIHelper {
       element.classList.remove(...classNames);
     }
   }
-    static confettiBurst(): void {
+
+  static showToast(message: string): void {
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.className = 'fixed bottom-6 left-1/2 z-[10000] max-w-sm -translate-x-1/2 rounded-2xl border border-zinc-700 bg-zinc-900 px-5 py-3 text-center text-sm text-zinc-100 shadow-xl';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  static confettiBurst(): void {
     const colors = ['#00ff9d', '#00b36b', '#ffffff'];
     for (let i = 0; i < 80; i++) {
       const confetti = document.createElement('div');

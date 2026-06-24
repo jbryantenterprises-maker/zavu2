@@ -8,6 +8,7 @@ import {
   sendPasswordResetEmail
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
+import { Logger } from './logger';
 
 // Firebase config using Vite Environment Variables
 const firebaseConfig = {
@@ -26,7 +27,7 @@ try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
 } catch (e) {
-  console.warn("Firebase not initialized. Make sure to add your config.", e);
+  Logger.warn("Firebase not initialized. Make sure to add your config.", e);
 }
 
 export type XavuUser = {
@@ -37,6 +38,12 @@ export type XavuUser = {
 };
 
 type AuthStateCallback = (user: XavuUser | null) => void;
+
+function firebaseErrorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
+}
 
 export class AuthService {
   private static user: XavuUser | null = null;
@@ -70,7 +77,7 @@ export class AuthService {
 
   static async signUp(email: string, password: string): Promise<{ success: boolean; error?: string }> {
     if (!auth) {
-      console.error("Firebase not initialized.");
+      Logger.error("Firebase not initialized.");
       return { success: false, error: "Authentication service not available" };
     }
 
@@ -81,17 +88,18 @@ export class AuthService {
     }
 
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      console.log("User signed up successfully:", result.user.uid);
+      await createUserWithEmailAndPassword(auth, email, password);
+      Logger.debug("User signed up successfully.");
       return { success: true };
-    } catch (error: any) {
-      console.error("Error signing up:", error);
+    } catch (error: unknown) {
+      Logger.error("Error signing up:", error);
       let errorMessage = "Sign up failed";
-      if (error.code === 'auth/email-already-in-use') {
+      const code = firebaseErrorCode(error);
+      if (code === 'auth/email-already-in-use') {
         errorMessage = "This email is already registered. Please sign in instead.";
-      } else if (error.code === 'auth/weak-password') {
+      } else if (code === 'auth/weak-password') {
         errorMessage = "Password must be at least 12 characters long with uppercase and lowercase letters.";
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (code === 'auth/invalid-email') {
         errorMessage = "Please enter a valid email address.";
       }
       return { success: false, error: errorMessage };
@@ -100,23 +108,24 @@ export class AuthService {
 
   static async signIn(email: string, password: string): Promise<{ success: boolean; error?: string }> {
     if (!auth) {
-      console.error("Firebase not initialized.");
+      Logger.error("Firebase not initialized.");
       return { success: false, error: "Authentication service not available" };
     }
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      console.log("User signed in successfully:", result.user.uid);
+      await signInWithEmailAndPassword(auth, email, password);
+      Logger.debug("User signed in successfully.");
       return { success: true };
-    } catch (error: any) {
-      console.error("Error signing in:", error);
+    } catch (error: unknown) {
+      Logger.error("Error signing in:", error);
       let errorMessage = "Sign in failed";
-      if (error.code === 'auth/user-not-found') {
+      const code = firebaseErrorCode(error);
+      if (code === 'auth/user-not-found') {
         errorMessage = "No account found with this email. Please sign up first.";
-      } else if (error.code === 'auth/wrong-password') {
+      } else if (code === 'auth/wrong-password') {
         errorMessage = "Incorrect password. Please try again.";
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (code === 'auth/invalid-email') {
         errorMessage = "Please enter a valid email address.";
-      } else if (error.code === 'auth/too-many-requests') {
+      } else if (code === 'auth/too-many-requests') {
         errorMessage = "Too many failed attempts. Please try again later.";
       }
       return { success: false, error: errorMessage };
@@ -125,19 +134,20 @@ export class AuthService {
 
   static async resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
     if (!auth) {
-      console.error("Firebase not initialized.");
+      Logger.error("Firebase not initialized.");
       return { success: false, error: "Authentication service not available" };
     }
     try {
       await sendPasswordResetEmail(auth, email);
-      console.log("Password reset email sent to:", email);
+      Logger.debug("Password reset email sent.");
       return { success: true };
-    } catch (error: any) {
-      console.error("Error sending password reset:", error);
+    } catch (error: unknown) {
+      Logger.error("Error sending password reset:", error);
       let errorMessage = "Failed to send password reset email";
-      if (error.code === 'auth/user-not-found') {
+      const code = firebaseErrorCode(error);
+      if (code === 'auth/user-not-found') {
         errorMessage = "No account found with this email address.";
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (code === 'auth/invalid-email') {
         errorMessage = "Please enter a valid email address.";
       }
       return { success: false, error: errorMessage };
@@ -149,7 +159,7 @@ export class AuthService {
     try {
       await firebaseSignOut(auth);
     } catch (error) {
-      console.error("Error signing out", error);
+      Logger.error("Error signing out", error);
     }
   }
 
@@ -208,7 +218,7 @@ export class AuthService {
       );
       localStorage.setItem(`xavu_pro_${firebaseUser.uid}`, isPro ? "true" : "false");
     } catch (e) {
-      console.warn("Failed to fetch token claims, using cached Pro status:", e);
+      Logger.warn("Failed to fetch token claims, using cached Pro status:", e);
     }
 
     this.user = {

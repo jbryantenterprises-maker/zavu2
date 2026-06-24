@@ -1,5 +1,5 @@
 /**
- * Cloud download handler — decrypts files downloaded from R2 cloud storage.
+ * Encrypted cloud link download handler — decrypts files downloaded from R2.
  *
  * When a user opens a cloud download URL, this module:
  * 1. Parses the decryption key (or password-wrapped bundle) from the URL fragment
@@ -8,6 +8,7 @@
  * 4. Triggers the browser download
  */
 import { FileEncryption } from './encryption.js';
+import { Logger } from './logger.js';
 
 export interface CloudDownloadParams {
   /** True if the key is password-wrapped */
@@ -186,7 +187,7 @@ export async function downloadAndDecryptFile(
     onProgress?.(100);
     return { success: true };
   } catch (error) {
-    console.error('Cloud download error:', error);
+    Logger.error('Cloud download error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Download failed',

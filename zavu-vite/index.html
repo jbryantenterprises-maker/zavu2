@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xavu • P2P WeTransfer (no servers, no storage)</title>
+    <title>Xavu • Private File Transfer</title>
     
     <!-- SEO and Social Sharing Meta Tags -->
-    <meta name="description" content="Send huge files directly browser-to-browser. No central storage, purely P2P.">
-    <meta property="og:title" content="Xavu • P2P File Transfer">
-    <meta property="og:description" content="Send huge files directly browser-to-browser. No central storage, purely P2P.">
+    <meta name="description" content="Send files browser-to-browser by default, with Pro encrypted 7-day cloud links when needed.">
+    <meta property="og:title" content="Xavu • Private File Transfer">
+    <meta property="og:description" content="Send files browser-to-browser by default, with Pro encrypted 7-day cloud links when needed.">
     <meta property="og:type" content="website">
     
     <!-- Inline Emoji Favicon -->
@@ -36,7 +36,7 @@
                 <a href="#" id="copy-code-link"
                     class="hover:text-emerald-400 transition-colors flex items-center gap-x-1 hidden sm:block">
                     <span class="text-emerald-400">★</span>
-                    <span>Zero storage • Pure P2P</span>
+                    <span>P2P by default • Encrypted cloud links for Pro</span>
                 </a>
                 <!-- AUTH MOUNT -->
                 <div id="auth-section" class="flex flex-wrap items-center justify-end gap-x-2 gap-y-2 text-right sm:gap-x-4 sm:border-l sm:border-zinc-800 sm:pl-8 sm:ml-2">
@@ -59,11 +59,11 @@
             
             <h2 class="text-4xl sm:text-6xl font-semibold tracking-tighter leading-none mb-6 logo-font">
                 Send huge files.<br>
-                <span class="text-emerald-400">Directly.</span> No servers.
+                <span class="text-emerald-400">Directly.</span> P2P by default.
             </h2>
             <p class="text-lg sm:text-xl text-zinc-400 max-w-lg mx-auto mb-8 sm:mb-10">
-                Drag &amp; drop → get a magic link → email it.<br>
-                Default is pure browser-to-browser WebRTC. Pro adds secure encrypted cloud links when you need them.
+                Drag &amp; drop → get a transfer link → email it.<br>
+                Default transfers use browser-to-browser WebRTC. Pro adds encrypted 7-day cloud links when you need them.
             </p>
 
             <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -86,7 +86,7 @@
                 <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
                     <div class="text-emerald-400 text-2xl mb-2">🔒</div>
                     <p class="font-medium">End-to-end encrypted by WebRTC</p>
-                    <p class="text-zinc-400 text-xs mt-1">DTLS + no central storage = truly private</p>
+                    <p class="text-zinc-400 text-xs mt-1">Default P2P mode uses DTLS and no central file storage</p>
                 </div>
                 <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
                     <div class="text-emerald-400 text-2xl mb-2">⚡</div>
@@ -96,7 +96,7 @@
                 <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
                     <div class="text-emerald-400 text-2xl mb-2">📧</div>
                     <p class="font-medium">Email the link instantly</p>
-                    <p class="text-zinc-400 text-xs mt-1">Opens your email client — no server involved</p>
+                    <p class="text-zinc-400 text-xs mt-1">Opens your email client with the transfer link</p>
                 </div>
             </div>
         </div>
@@ -127,7 +127,7 @@
                         <span class="text-xl">↑</span>
                     </button>
                     <input type="file" id="file-input" class="hidden" multiple>
-                    <p class="text-xs text-zinc-500 mt-8">Large files supported. Use cloud mode for 4K movies and other multi-GB uploads.</p>
+                    <p class="text-xs text-zinc-500 mt-8">Large files supported. Use a Pro encrypted cloud link for 4K movies and other multi-GB uploads.</p>
                 </div>
             </div>
 
@@ -236,7 +236,7 @@
         <div id="receiver-screen" class="hidden">
             <div class="max-w-lg mx-auto bg-zinc-900 rounded-3xl p-8">
                 <div class="text-center mb-8">
-                    <h2 class="text-3xl font-semibold mb-2">Incoming P2P transfer</h2>
+                    <h2 id="receiver-title" class="text-3xl font-semibold mb-2">Incoming P2P transfer</h2>
                     <p class="text-emerald-400" id="receiver-sender-id"></p>
                 </div>
 
@@ -245,7 +245,7 @@
                         class="animate-spin w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full mx-auto mb-6">
                     </div>
                     <p class="text-zinc-400">Connecting directly to sender…</p>
-                    <p class="text-xs text-zinc-500 mt-6">This is pure browser-to-browser magic.</p>
+                    <p class="text-xs text-zinc-500 mt-6">This transfer uses a direct browser-to-browser connection.</p>
                 </div>
 
                 <div id="receiver-connected" class="hidden">
@@ -279,7 +279,7 @@
     <div id="how-modal"
         class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
         <div class="max-w-2xl bg-zinc-900 rounded-3xl p-10">
-            <h2 class="text-4xl font-semibold mb-8">How Xavu works (the creative P2P twist)</h2>
+            <h2 class="text-4xl font-semibold mb-8">How Xavu transfers files</h2>
             <div class="space-y-8 text-zinc-300">
                 <div class="flex gap-6">
                     <div class="text-5xl">1️⃣</div>
@@ -321,7 +321,7 @@
                         <ul class="text-sm list-disc pl-5 space-y-1">
                             <li>Real-time speedometer</li>
                             <li>Live progress on both sides</li>
-                            <li>QR code for phone-to-phone magic</li>
+                            <li>QR code for phone-to-phone transfer links</li>
                             <li>mailto: instant email composer</li>
                             <li>Zero-knowledge design — even we (the creators) can't see your files</li>
                         </ul>
@@ -391,6 +391,28 @@
                 class="mt-6 w-full py-2 text-zinc-400 hover:text-white text-sm transition-colors">
                 Cancel
             </button>
+        </div>
+    </div>
+
+    <!-- Input Prompt Modal -->
+    <div id="input-modal"
+        class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
+        <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl p-8">
+            <h2 id="input-modal-title" class="text-2xl font-semibold mb-3 text-center">Enter value</h2>
+            <p id="input-modal-description" class="text-zinc-400 text-sm mb-6 text-center"></p>
+            <input id="input-modal-field"
+                class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-2xl text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20">
+            <div id="input-modal-error" class="hidden mt-3 text-red-400 text-sm text-center"></div>
+            <div class="mt-6 flex gap-3">
+                <button id="input-modal-cancel-btn"
+                    class="flex-1 py-3 rounded-2xl border border-zinc-700 text-zinc-300 hover:text-white transition-colors">
+                    Cancel
+                </button>
+                <button id="input-modal-submit-btn"
+                    class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-3 rounded-2xl transition-colors">
+                    Continue
+                </button>
+            </div>
         </div>
     </div>
 
@@ -490,7 +512,8 @@
         class="hidden fixed inset-0 bg-black/80 backdrop-blur-xl z-[9999] flex items-center justify-center">
         <div class="max-w-2xl w-full mx-4 bg-zinc-900 rounded-3xl p-8">
             <h2 class="text-3xl font-semibold mb-2 text-center">Choose Your Plan</h2>
-            <p class="text-zinc-400 text-center mb-8">Unlock unlimited file transfers and encrypted cloud storage</p>
+            <p id="plan-modal-reason" class="hidden text-emerald-300 text-center mb-4 text-sm"></p>
+            <p class="text-zinc-400 text-center mb-8">Unlock larger transfers, 7-day encrypted cloud links, and password protection</p>
             
             <div class="grid md:grid-cols-2 gap-6 mb-8">
                 <!-- Monthly Plan -->
@@ -502,11 +525,11 @@
                     <ul class="space-y-2 text-sm text-zinc-300 mb-6">
                         <li class="flex items-center gap-x-2">
                             <span class="text-emerald-400">?</span>
-                            Unlimited file transfers
+                            Larger encrypted transfers
                         </li>
                         <li class="flex items-center gap-x-2">
                             <span class="text-emerald-400">?</span>
-                            Encrypted cloud storage (7 days)
+                            7-day encrypted cloud links
                         </li>
                         <li class="flex items-center gap-x-2">
                             <span class="text-emerald-400">?</span>
@@ -514,7 +537,7 @@
                         </li>
                         <li class="flex items-center gap-x-2">
                             <span class="text-emerald-400">?</span>
-                            Priority support
+                            Recipient links that work after you close your tab
                         </li>
                     </ul>
                     <button id="select-monthly-btn"
@@ -543,7 +566,7 @@
                         </li>
                         <li class="flex items-center gap-x-2">
                             <span class="text-emerald-400">?</span>
-                            Priority webhook processing
+                            Best value for frequent sending
                         </li>
                         <li class="flex items-center gap-x-2">
                             <span class="text-emerald-400">?</span>

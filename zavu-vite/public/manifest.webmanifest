@@ -1,7 +1,7 @@
 {
   "name": "Xavu",
   "short_name": "Xavu",
-  "description": "Send huge files directly browser-to-browser. No central storage, purely P2P.",
+  "description": "Send files browser-to-browser by default, with Pro encrypted 7-day cloud links when needed.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",

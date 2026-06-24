@@ -7,8 +7,10 @@ import { CloudStorageService } from './cloud-storage.js';
 import { FileEncryption } from './encryption.js';
 import { FileReceiver } from './file-receiver.js';
 import { AuthService } from './auth.js';
+import type { XavuUser } from './auth.js';
 import { PaymentService } from './payment.js';
 import { parseCloudDownloadFragment, downloadAndDecryptFile } from './cloud-download.js';
+import { Logger } from './logger.js';
 
 /** Escape HTML special characters to prevent XSS when inserting user content */
 function escapeHtml(str: string): string {
@@ -22,6 +24,9 @@ function escapeHtml(str: string): string {
 
 export class XavuApp {
   private static readonly CLOUD_CLEANUP_STORAGE_KEY = 'xavuCloudFiles';
+  private static readonly FREE_TRANSFER_LIMIT_BYTES = 500 * 1024 * 1024;
+  private static readonly P2P_SENDER_CONNECT_TIMEOUT_MS = 10_000;
+  private static readonly P2P_RECEIVER_CONNECT_TIMEOUT_MS = 15_000;
   private webrtc: WebRTCManager;
   private fileHandler: FileHandler;
   private cloudStorage: CloudStorageService;
@@ -45,7 +50,7 @@ export class XavuApp {
     this.webrtc = new WebRTCManager();
     this.fileHandler = new FileHandler();
     
-    // Initialize cloud storage service (Cloudflare R2)
+    // Initialize encrypted cloud link service (Cloudflare R2)
     this.cloudStorage = new CloudStorageService();
     
     this.init();
@@ -59,7 +64,6 @@ export class XavuApp {
 
     // Auth & Payments
     AuthService.init();
-    PaymentService.init();
     AuthService.onAuthStateChanged((user) => {
       this.updateAuthUI(user);
       if (user && user.uid !== this.cloudCleanupUserId) {
@@ -71,7 +75,7 @@ export class XavuApp {
     });
   }
 
-  private updateAuthUI(user: any) {
+  private updateAuthUI(user: XavuUser | null) {
     const authBtn = document.getElementById('auth-btn');
     if (user) {
       if (authBtn) authBtn.textContent = 'Sign Out';
@@ -88,7 +92,7 @@ export class XavuApp {
       }
     } else {
       if (authBtn) authBtn.textContent = 'Sign In';
-      UIHelper.hideElement('upgrade-btn');
+      UIHelper.showElement('upgrade-btn');
       UIHelper.hideElement('pro-badge');
       UIHelper.hideElement('manage-billing-btn');
       UIHelper.hideElement('user-name');
@@ -125,6 +129,73 @@ export class XavuApp {
     UIHelper.hideElement('signin-modal');
     UIHelper.hideElement('signup-modal');
     UIHelper.hideElement('reset-modal');
+  }
+
+  private promptForInput(options: {
+    title: string;
+    description: string;
+    inputType?: 'text' | 'password' | 'url';
+    placeholder?: string;
+    confirmLabel?: string;
+    requiredMessage?: string;
+  }): Promise<string | null> {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('input-modal');
+      const title = document.getElementById('input-modal-title');
+      const description = document.getElementById('input-modal-description');
+      const input = document.getElementById('input-modal-field') as HTMLInputElement | null;
+      const error = document.getElementById('input-modal-error');
+      const submit = document.getElementById('input-modal-submit-btn') as HTMLButtonElement | null;
+      const cancel = document.getElementById('input-modal-cancel-btn') as HTMLButtonElement | null;
+
+      if (!modal || !title || !description || !input || !error || !submit || !cancel) {
+        resolve(null);
+        return;
+      }
+
+      title.textContent = options.title;
+      description.textContent = options.description;
+      input.type = options.inputType || 'text';
+      input.value = '';
+      input.placeholder = options.placeholder || '';
+      submit.textContent = options.confirmLabel || 'Continue';
+      error.textContent = '';
+      UIHelper.hideElement('input-modal-error');
+      UIHelper.showElement('input-modal');
+
+      let settled = false;
+      const finish = (value: string | null) => {
+        if (settled) return;
+        settled = true;
+        UIHelper.hideElement('input-modal');
+        submit.onclick = null;
+        cancel.onclick = null;
+        input.onkeydown = null;
+        resolve(value);
+      };
+
+      submit.onclick = () => {
+        const value = input.value.trim();
+        if (!value) {
+          error.textContent = options.requiredMessage || 'This field is required.';
+          UIHelper.showElement('input-modal-error');
+          return;
+        }
+        finish(value);
+      };
+      cancel.onclick = () => finish(null);
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submit.click();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          finish(null);
+        }
+      };
+
+      setTimeout(() => input.focus(), 0);
+    });
   }
 
   async handleSignIn(email: string, password: string) {
@@ -174,11 +245,21 @@ export class XavuApp {
   }
 
   manageBilling() {
-    void PaymentService.openBillingPortal();
+    void this.openBillingPortal();
   }
 
   showPlanModal() {
     UIHelper.showElement('plan-modal');
+  }
+
+  showUpgradePrompt(reason?: string) {
+    if (reason) {
+      UIHelper.updateElementText('plan-modal-reason', reason);
+      UIHelper.showElement('plan-modal-reason');
+    } else {
+      UIHelper.hideElement('plan-modal-reason');
+    }
+    this.showPlanModal();
   }
 
   hidePlanModal() {
@@ -186,8 +267,26 @@ export class XavuApp {
   }
 
   async selectPlan(plan: 'monthly' | 'yearly') {
+    if (!AuthService.getUser()) {
+      this.hidePlanModal();
+      this.showSignUpModal();
+      UIHelper.showElement('signup-error');
+      UIHelper.updateElementText('signup-error', 'Create an account to start checkout and activate Pro.');
+      return;
+    }
+
     this.hidePlanModal();
-    await PaymentService.upgradeToPro(plan);
+    const result = await PaymentService.upgradeToPro(plan);
+    if (!result.success) {
+      this.showBillingMessage(result.error, 'info');
+    }
+  }
+
+  private async openBillingPortal() {
+    const result = await PaymentService.openBillingPortal();
+    if (!result.success) {
+      this.showBillingMessage(result.error, 'info');
+    }
   }
 
   private handleBillingReturnState() {
@@ -239,7 +338,10 @@ export class XavuApp {
     const user = AuthService.getUser();
     if (!user || !user.isPro) {
        checkbox.checked = false;
-       alert(`You need to upgrade to Pro to use the "${feature}" feature.`);
+       const reason = feature === 'cloud'
+         ? 'Encrypted cloud links are a Pro feature. Upgrade to create 7-day links that work after you close your tab.'
+         : 'Password protection is a Pro feature for encrypted cloud links.';
+       this.showUpgradePrompt(reason);
     }
   }
 
@@ -278,6 +380,8 @@ export class XavuApp {
     // Show the cloud download UI
     UIHelper.hideElement('landing-screen');
     UIHelper.showElement('receiver-screen');
+    UIHelper.updateElementText('receiver-title', 'Encrypted cloud download');
+    UIHelper.updateElementText('receiver-sender-id', '7-day encrypted link');
 
     if (params.isPasswordProtected) {
       this.showPasswordPromptForDownload(url, params);
@@ -301,8 +405,15 @@ export class XavuApp {
     if (downloadBtn) {
       downloadBtn.style.display = '';
       downloadBtn.textContent = 'Enter Password & Download';
-      downloadBtn.onclick = () => {
-        const password = prompt('Enter the password for this file:');
+      downloadBtn.onclick = async () => {
+        const password = await this.promptForInput({
+          title: 'Enter Password',
+          description: 'This encrypted cloud link requires a password before download.',
+          inputType: 'password',
+          placeholder: 'Password',
+          confirmLabel: 'Download',
+          requiredMessage: 'Enter the password to continue.',
+        });
         if (password) {
           downloadBtn.style.display = 'none';
           void this.startCloudDownload(url, params, password);
@@ -363,8 +474,15 @@ export class XavuApp {
     UIHelper.showElement('drop-zone');
   }
 
-  pasteLink() {
-    const link = prompt("Paste the Xavu URL you received via email:");
+  async pasteLink() {
+    const link = await this.promptForInput({
+      title: 'Paste Transfer Link',
+      description: 'Paste a Xavu P2P link or encrypted cloud link.',
+      inputType: 'url',
+      placeholder: 'https://...',
+      confirmLabel: 'Open Link',
+      requiredMessage: 'Paste a transfer link to continue.',
+    });
     if (!link) return;
     
     try {
@@ -373,15 +491,16 @@ export class XavuApp {
       if (id) {
         UIHelper.hideElement('landing-screen');
         UIHelper.showElement('receiver-screen');
+        UIHelper.updateElementText('receiver-title', 'Incoming P2P transfer');
         UIHelper.updateElementText('receiver-sender-id', `Connecting to ${id.slice(0, 8)}…`);
         this.connectAsReceiver(id);
       } else if (url.pathname.includes('/api/download/') && url.hash) {
         window.location.href = link;
       } else {
-        alert("Invalid link. Use a Xavu P2P link or a cloud download link.");
+        this.showBillingMessage('Invalid link. Use a Xavu P2P link or encrypted cloud link.', 'info');
       }
     } catch (e) {
-      alert("Not a valid URL");
+      this.showBillingMessage('That does not look like a valid URL.', 'info');
     }
   }
 
@@ -418,13 +537,12 @@ export class XavuApp {
     const files = this.fileHandler.getSelectedFiles();
     const totalSize = this.fileHandler.getTotalSize();
 
-    // Enforce Pro limitations
+    // Enforce the public free-transfer limit before creating links.
     const user = AuthService.getUser();
     const isPro = user?.isPro || false;
-    const maxFreeSize = 500 * 1024 * 1024; // 500 MB
 
-    if (!isPro && totalSize > maxFreeSize) {
-      alert(`Free accounts are limited to 500MB per transfer. You selected ${formatBytes(totalSize)}.\nPlease sign in and upgrade to Pro to send unlimited size files.`);
+    if (!isPro && totalSize > XavuApp.FREE_TRANSFER_LIMIT_BYTES) {
+      this.showUpgradePrompt(`Free transfers are limited to ${formatBytes(XavuApp.FREE_TRANSFER_LIMIT_BYTES)}. You selected ${formatBytes(totalSize)}. Upgrade to Pro for larger encrypted transfers and 7-day cloud links.`);
       this.clearFile();
       return;
     }
@@ -446,11 +564,11 @@ export class XavuApp {
     UIHelper.showElement('drop-zone');
   }
 
-  // P2P Link Creation
+  // Link creation: live P2P by default, encrypted cloud link when selected.
   async createP2PLink(existingId: string | null = null) {
     const files = this.fileHandler.getSelectedFiles();
     if (files.length === 0) {
-      alert("Select a file first!");
+      UIHelper.showToast('Select a file first.');
       return;
     }
 
@@ -458,7 +576,7 @@ export class XavuApp {
     if (isCloudUpload) {
       const user = AuthService.getUser();
       if (!user || !user.isPro) {
-        alert('You need a Pro account to use cloud uploads.');
+        this.showUpgradePrompt('Encrypted cloud links are a Pro feature. Upgrade to create 7-day links that recipients can download anytime.');
         return;
       }
 
@@ -466,8 +584,15 @@ export class XavuApp {
       const isPasswordProtected = (document.getElementById('password-protect-checkbox') as HTMLInputElement)?.checked;
       let password: string | undefined;
       if (isPasswordProtected) {
-        password = prompt('Set a password for this file transfer.\nRecipient will need this password to download:') || undefined;
-        if (!password) return; // User cancelled
+        password = await this.promptForInput({
+          title: 'Set Download Password',
+          description: 'Recipients will need this password to decrypt the encrypted cloud link.',
+          inputType: 'password',
+          placeholder: 'Password',
+          confirmLabel: 'Create Link',
+          requiredMessage: 'Set a password or turn off password protection.',
+        }) || undefined;
+        if (!password) return;
       }
 
       return this.uploadDirectToCloud(files, password);
@@ -505,7 +630,7 @@ export class XavuApp {
       this.updateLinkScreenText(false);
       UIHelper.showElement('link-screen');
 
-      console.log('%c✅ Xavu created — ID: ' + roomId, 'color:#00ff9d; font-family:monospace');
+      Logger.debug('P2P transfer link created.');
 
       this.setupSenderListeners(fileMetas, totalSize, flowToken);
     }, 100);
@@ -519,11 +644,21 @@ export class XavuApp {
     const warningEl = document.getElementById('link-screen-warning');
 
     if (isCloud) {
-      if (titleEl) titleEl.textContent = 'Your cloud download link is ready';
-      if (warningEl) warningEl.innerHTML = '☁️ File uploaded to encrypted cloud storage.<br>This link is valid for 7 days. You can close this tab.';
+      if (titleEl) titleEl.textContent = 'Your encrypted cloud link is ready';
+      if (warningEl) {
+        UIHelper.updateElement(
+          'link-screen-warning',
+          'File uploaded as an encrypted cloud link.<br>This link is valid for 7 days. You can close this tab.'
+        );
+      }
     } else {
       if (titleEl) titleEl.textContent = 'Your live P2P link is ready';
-      if (warningEl) warningEl.innerHTML = '⚠️ Keep this tab open until the transfer finishes.<br>The file lives only in your browser memory.';
+      if (warningEl) {
+        UIHelper.updateElement(
+          'link-screen-warning',
+          'Keep this tab open until the transfer finishes.<br>The file lives only in your browser memory.'
+        );
+      }
     }
   }
 
@@ -534,7 +669,7 @@ export class XavuApp {
       if (flowToken !== this.senderFlowToken || this.isCloudTransfer) return;
       clearTimeout(connectionTimeout);
       this.webrtc.setCurrentPeer(peerId);
-      console.log('Receiver connected!', peerId);
+      Logger.debug('Receiver connected.');
       UIHelper.updateElement('peer-status', '<span class="text-emerald-400">✅ CONNECTED</span>');
       
       this.webrtc.sendSignalData({
@@ -551,32 +686,28 @@ export class XavuApp {
       if (!this.webrtc.getCurrentPeer()) {
         const user = AuthService.getUser();
         if (user?.isPro && this.cloudStorage.isConfigured()) {
-          console.log('P2P connection failed, falling back to cloud storage (Pro)');
+          Logger.debug('P2P connection failed, falling back to encrypted cloud link.');
           this.fallbackToCloudStorage(fileMetas, flowToken);
         } else {
-          UIHelper.updateElement('peer-status', '<span class="text-red-500">?? P2P CONNECTION FAILED</span>');
+          UIHelper.updateElement('peer-status', '<span class="text-red-500">P2P CONNECTION FAILED</span>');
           UIHelper.updateElement('sender-progress-text', `
-            ?? Unable to establish P2P connection<br>
+            Unable to establish P2P connection<br>
             <span class="text-xs text-zinc-400">
               Your network may be blocking peer-to-peer connections.<br>
-              Try: different network, disable VPN/firewall, or upgrade to Pro for cloud storage
+              Try a different network, disable VPN/firewall, or use a Pro encrypted cloud link.
             </span>
           `);
-          console.log('P2P connection failed ? network blocking P2P or restrictive firewall');
+          Logger.debug('P2P connection failed: network blocking P2P or restrictive firewall.');
         }
       }
-    }, 10000); // 10 second timeout
+    }, XavuApp.P2P_SENDER_CONNECT_TIMEOUT_MS);
 
     this.webrtc.onSignal((data: SignalData, peerId: string) => {
       if (flowToken !== this.senderFlowToken || this.isCloudTransfer) return;
       if (data.type === 'start_download') {
         this.startMultiFileTransfer(peerId, data.fileIndex || 0, data.offset || 0);
-      } else if ((data as any) === 'start_download') {
-        this.startMultiFileTransfer(peerId, 0, 0);
-      } else if ((data as any) === 'received') {
-        console.log('Receiver acknowledged full system');
       } else if (data.type === 'ack_chunk') {
-        this.unackedChunks--;
+        this.unackedChunks = Math.max(0, this.unackedChunks - 1);
         if (this.resumeReading && this.unackedChunks < this.MAX_WINDOW / 2) {
           const r = this.resumeReading;
           this.resumeReading = null;
@@ -597,13 +728,19 @@ export class XavuApp {
   // File Transfer
   private startMultiFileTransfer(peerTarget: string, startIndex: number = 0, startOffset: number = 0) {
     this.transferInProgress = true;
+    this.unackedChunks = 0;
+    this.resumeReading = null;
     const files = this.fileHandler.getSelectedFiles();
+    const normalizedStartIndex = Math.max(0, Math.min(Math.floor(startIndex), files.length));
+    const normalizedStartOffset = normalizedStartIndex < files.length
+      ? Math.max(0, Math.min(Math.floor(startOffset), files[normalizedStartIndex].size))
+      : 0;
     
     let globalOffset = 0; 
-    for (let i = 0; i < startIndex; i++) {
+    for (let i = 0; i < normalizedStartIndex; i++) {
       globalOffset += files[i].size;
     }
-    globalOffset += startOffset;
+    globalOffset += normalizedStartOffset;
     
     const totalSize = files.reduce((acc, f) => acc + f.size, 0);
     let startTime = Date.now();
@@ -624,8 +761,6 @@ export class XavuApp {
       }
 
       const file = files[index];
-      let currentFileOffset = offset;
-      
       this.webrtc.sendSignalData({ 
         type: 'next_file', 
         index: index, 
@@ -634,7 +769,7 @@ export class XavuApp {
         mime: file.type || 'application/octet-stream'
       }, peerTarget);
 
-      const reader = file.stream().getReader();
+      const reader = file.slice(offset).stream().getReader();
       
       const readNextChunk = async () => {
         if (this.unackedChunks >= this.MAX_WINDOW) {
@@ -661,10 +796,11 @@ export class XavuApp {
         this.unackedChunks++;
 
         bytesSentSinceStart += value.byteLength;
-        currentFileOffset += value.byteLength;
         globalOffset += value.byteLength;
         
-        const progress = Math.min(Math.round((globalOffset / totalSize) * 100), 100);
+        const progress = totalSize > 0
+          ? Math.min(Math.round((globalOffset / totalSize) * 100), 100)
+          : 100;
         
         UIHelper.showElement('sender-progress-area');
         UIHelper.setProgressBar('sender-progress-bar', progress);
@@ -687,7 +823,7 @@ export class XavuApp {
       setTimeout(readNextChunk, 100);
     };
 
-    sendFile(startIndex, startOffset);
+    sendFile(normalizedStartIndex, normalizedStartOffset);
   }
 
   private async fallbackToCloudStorage(fileMetas: FileMetadata[], flowToken: number) {
@@ -697,10 +833,11 @@ export class XavuApp {
     this.webrtc.setCurrentPeer('');
     this.isCloudTransfer = true;
     this.cloudDownloadUrls = [];
+    this.transferInProgress = true;
     this.updateLinkScreenText(true);
 
-    UIHelper.updateElement('peer-status', '<span class="text-yellow-500">⚡ UPLOADING TO CLOUD</span>');
-    UIHelper.updateElement('sender-progress-text', '<span class="text-yellow-500">P2P failed, uploading to encrypted cloud storage...</span>');
+    UIHelper.updateElement('peer-status', '<span class="text-yellow-500">CREATING ENCRYPTED CLOUD LINK</span>');
+    UIHelper.updateElement('sender-progress-text', '<span class="text-yellow-500">P2P connection failed. Creating an encrypted cloud link instead...</span>');
     
     const files = this.fileHandler.getSelectedFiles();
     const uploadedLinks: string[] = [];
@@ -714,7 +851,7 @@ export class XavuApp {
         
         UIHelper.updateElement('sender-progress-text', `
           Encrypting and uploading ${i + 1} of ${files.length}: ${escapeHtml(file.name)}<br>
-          <span class="text-xs text-zinc-500">Fallback to encrypted cloud storage</span>
+          <span class="text-xs text-zinc-500">Encrypted cloud link fallback</span>
         `);
         
         const result = await this.cloudStorage.uploadFile(file, metadata);
@@ -732,7 +869,6 @@ export class XavuApp {
         }
       }
 
-      // Display ALL links (fix for issue #3)
       this.cloudDownloadUrls = uploadedLinks;
       const linksHtml = uploadedLinks
         .map(url => `<div class="mb-2"><span class="text-emerald-400 font-medium break-all text-xs lg:text-sm">${escapeHtml(url)}</span></div>`)
@@ -740,16 +876,20 @@ export class XavuApp {
       UIHelper.updateElement('share-link-display', linksHtml);
       
       UIHelper.updateElement('sender-progress-text', `
-        ✅ Uploaded to encrypted cloud! <br>
+        Encrypted cloud link ready.<br>
         <span class="text-xs">Share the link${uploadedLinks.length > 1 ? 's' : ''} above (Valid for 7 days).</span>
       `);
+      this.transferInProgress = false;
       
-      // Store ALL file IDs for cleanup (fix for issue #4)
       this.recordCloudUploads(uploadedFileIds, latestExpiresAt);
     } catch (error) {
-      console.error('Cloud storage fallback failed:', error);
+      this.transferInProgress = false;
+      if (uploadedFileIds.length > 0) {
+        await this.cloudStorage.deleteFiles(uploadedFileIds);
+      }
+      Logger.error('Encrypted cloud link fallback failed:', error);
       UIHelper.updateElement('sender-progress-text', `
-        ❌ Both P2P and cloud storage failed<br>
+        Both P2P transfer and encrypted cloud link creation failed.<br>
         <span class="text-xs text-red-500">Please try again</span>
       `);
     }
@@ -761,17 +901,18 @@ export class XavuApp {
     this.webrtc.setCurrentPeer('');
     this.isCloudTransfer = true;
     this.cloudDownloadUrls = [];
+    this.transferInProgress = true;
 
     UIHelper.hideElement('file-preview');
     UIHelper.hideElement('drop-zone');
     
     UIHelper.showElement('link-screen');
     this.updateLinkScreenText(true);
-    UIHelper.updateElement('peer-status', '<span class="text-emerald-400">⚡ ENCRYPTING & UPLOADING TO CLOUD</span>');
+    UIHelper.updateElement('peer-status', '<span class="text-emerald-400">CREATING ENCRYPTED CLOUD LINK</span>');
     UIHelper.updateElementText('share-link-display', 'Encrypting and uploading...');
     
     UIHelper.showElement('sender-progress-area');
-    UIHelper.setProgressBar('sender-progress-bar', 10); // Just a visual start
+    UIHelper.setProgressBar('sender-progress-bar', 10);
     
     const uploadedLinks: string[] = [];
     const uploadedFileIds: string[] = [];
@@ -802,27 +943,30 @@ export class XavuApp {
         }
       }
       
-      // Store URLs for copy/email (fix for issue #9)
       this.cloudDownloadUrls = uploadedLinks;
 
-      // Display all links
       const linksHtml = uploadedLinks
         .map(url => `<div class="mb-2"><span class="text-emerald-400 font-medium break-all text-xs lg:text-sm">${escapeHtml(url)}</span></div>`)
         .join('');
       UIHelper.updateElement('share-link-display', linksHtml);
 
       UIHelper.updateElement('sender-progress-text', `
-        ✅ Upload complete! 🎉<br>
+        Encrypted cloud link ready.<br>
         <span class="text-xs">Share the link${uploadedLinks.length > 1 ? 's' : ''} above (Valid for 7 days).${password ? ' 🔐 Password protected.' : ''}</span>
       `);
+      this.transferInProgress = false;
       UIHelper.confettiBurst();
       
       this.recordCloudUploads(uploadedFileIds, latestExpiresAt);
-    } catch (error: any) {
-      console.error('Cloud storage upload failed:', error);
+    } catch (error: unknown) {
+      this.transferInProgress = false;
+      if (uploadedFileIds.length > 0) {
+        await this.cloudStorage.deleteFiles(uploadedFileIds);
+      }
+      Logger.error('Encrypted cloud link upload failed:', error);
       UIHelper.updateElement('sender-progress-text', `
-        ❌ Upload failed<br>
-        <span class="text-xs text-red-500">${escapeHtml(error.message || 'Please try again')}</span>
+        Encrypted cloud link creation failed.<br>
+        <span class="text-xs text-red-500">${escapeHtml(error instanceof Error ? error.message : 'Please try again')}</span>
       `);
     }
   }
@@ -838,20 +982,20 @@ export class XavuApp {
     setTimeout(() => {
       if (!this.webrtc.getCurrentPeer() || this.webrtc.getCurrentPeer() === targetId) {
         // Still using the initial targetId means we haven't connected to the actual sender yet
-        UIHelper.updateElementText('receiver-progress-text', `
-          ?? Unable to connect to sender<br>
+        UIHelper.updateElement('receiver-progress-text', `
+          Unable to connect to sender<br>
           <span class="text-xs text-zinc-500">
             Your network may be blocking P2P connections.<br>
-            Try a different network or ask sender to use cloud storage via Pro account
+            Try a different network or ask the sender to create a Pro encrypted cloud link.
           </span>
         `);
       }
-    }, 15000); // 15 second timeout for receiver
+    }, XavuApp.P2P_RECEIVER_CONNECT_TIMEOUT_MS);
   }
 
   private setupReceiverListeners() {
     this.webrtc.onPeerJoin((peerId) => {
-      console.log('Detected connected peer in room:', peerId);
+      Logger.debug('Detected connected peer in room.');
       // Save the sender's real peer ID so we can request the download from them
       this.webrtc.setCurrentPeer(peerId);
     });
@@ -886,7 +1030,7 @@ export class XavuApp {
         }
       },
       (error) => {
-        console.error('Receiver error:', error);
+        Logger.error('Receiver error:', error);
         UIHelper.updateElementText('receiver-progress-text', `❌ Error: ${error}`);
       }
     );
@@ -939,7 +1083,7 @@ export class XavuApp {
         // Send ack to maintain backpressure
         this.webrtc.sendSignalData({ type: 'ack_chunk' }, peerId);
       } catch (error) {
-        console.error('Receiver chunk error:', error);
+        Logger.error('Receiver chunk error:', error);
         UIHelper.updateElementText('receiver-progress-text', '❌ Error: Failed to decrypt transfer chunk.');
       }
     });
@@ -971,6 +1115,7 @@ export class XavuApp {
     if (id) {
       UIHelper.hideElement('landing-screen');
       UIHelper.showElement('receiver-screen');
+      UIHelper.updateElementText('receiver-title', 'Incoming P2P transfer');
       UIHelper.updateElementText('receiver-sender-id', `Connecting to peer ${id.slice(0, 8)}…`);
       this.connectAsReceiver(id);
     }
@@ -1020,7 +1165,7 @@ export class XavuApp {
 
     const result = await this.cloudStorage.deleteFiles(expired.map((entry) => entry.fileId));
     if (!result.success) {
-      console.warn('Failed to clean up expired cloud uploads:', result.error);
+      Logger.warn('Failed to clean up expired cloud uploads:', result.error);
       return;
     }
 
@@ -1045,12 +1190,14 @@ export class XavuApp {
       let targetButton = Array.from(buttons).find(b => b.textContent?.includes('Copy link'));
       
       if (targetButton) {
-        const orig = targetButton.innerHTML;
-        targetButton.innerHTML = '✅ Copied!';
-        setTimeout(() => targetButton!.innerHTML = orig, 1500);
+        const originalText = targetButton.textContent || 'Copy link';
+        targetButton.textContent = 'Copied!';
+        setTimeout(() => {
+          targetButton!.textContent = originalText;
+        }, 1500);
       }
     } catch (err) {
-      console.error('Failed to copy link:', err);
+      Logger.error('Failed to copy link:', err);
     }
   }
 
@@ -1079,7 +1226,7 @@ export class XavuApp {
     try {
       await UIHelper.showQRCode('qr-canvas', link);
     } catch (error) {
-      console.error('Failed to generate QR code:', error);
+      Logger.error('Failed to generate QR code:', error);
     }
   }
 

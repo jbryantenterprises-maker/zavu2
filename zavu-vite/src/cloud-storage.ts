@@ -1,5 +1,5 @@
 /**
- * Cloud storage service — uses Pages Functions to create and finalize
+ * Encrypted cloud link service — uses Pages Functions to create and finalize
  * multipart upload sessions, while the browser sends encrypted parts
  * directly to R2 using presigned URLs.
  *
@@ -14,6 +14,7 @@
 import type { FileMetadata } from './webrtc.js';
 import { AuthService } from './auth.js';
 import { FileEncryption } from './encryption.js';
+import { Logger } from './logger.js';
 
 export interface UploadResult {
   success: boolean;
@@ -45,6 +46,13 @@ export class CloudStorageService {
     _metadata: FileMetadata,
     password?: string
   ): Promise<UploadResult> {
+    if (file.size === 0) {
+      return {
+        success: false,
+        error: 'Cloud links do not support empty files yet. Send this file with live P2P transfer instead.',
+      };
+    }
+
     let activeFileId: string | null = null;
     let activeUploadId: string | null = null;
 
@@ -137,7 +145,7 @@ export class CloudStorageService {
       if (activeFileId && activeUploadId) {
         await this.abortMultipartUpload(activeFileId, activeUploadId);
       }
-      console.error('Cloud upload error:', error);
+      Logger.error('Cloud upload error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error during upload',
@@ -349,7 +357,7 @@ export class CloudStorageService {
 
       return { success: true, deletedCount: result.deletedCount ?? fileIds.length };
     } catch (error) {
-      console.error('Cloud delete error:', error);
+      Logger.error('Cloud delete error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error during delete',

@@ -97,7 +97,7 @@
             <li><strong>We don't require personal information</strong> - You can use our service without creating an account</li>
             <li><strong>We don't sell your data</strong> - We have no user data to sell from P2P transfers</li>
         </ul>
-        <p><strong>Note:</strong> Pro users who choose cloud storage will have files stored on our encrypted servers. See section 4 for details.</p>
+        <p><strong>Note:</strong> Pro users who choose encrypted cloud links will have client-side encrypted files stored in Cloudflare R2 for 7 days. See section 4 for details.</p>
         
         <h2>2. How Xavu Works</h2>
         <p>Xavu uses peer-to-peer (P2P) technology to enable direct file transfers:</p>
@@ -125,20 +125,20 @@
             <li><strong>Account preferences</strong> - User settings and configuration data</li>
         </ul>
         
-        <h3>3.3 Cloud Storage Data (Pro Users Only)</h3>
+        <h3>3.3 Encrypted Cloud Link Data (Pro Users Only)</h3>
         <ul>
             <li><strong>Encrypted files</strong> - Client-side encrypted files stored for 7 days</li>
             <li><strong>File metadata</strong> - File names, sizes, and transfer timestamps</li>
             <li><strong>Access logs</strong> - Records of file access and downloads</li>
         </ul>
         
-        <h2>4. Pro Features and Cloud Storage</h2>
+        <h2>4. Pro Features and Encrypted Cloud Links</h2>
         <p>For users who choose Pro features:</p>
         <ul>
             <li>Email addresses are stored securely for authentication purposes only</li>
             <li>Payment information is processed by Stripe and is not stored on our servers</li>
             <li>We never store credit card details on our servers</li>
-            <li><strong>Cloud storage files are stored on our encrypted servers</strong> - Only when you explicitly choose cloud mode</li>
+            <li><strong>Encrypted cloud link files are stored in Cloudflare R2</strong> - Only when you explicitly choose cloud mode</li>
             <li>Cloud files are encrypted client-side before upload and stored for 7 days</li>
             <li>Only you (and recipients with your link/password) can access cloud-stored files</li>
         </ul>
@@ -148,7 +148,7 @@
             <p>Security is fundamental to our privacy approach:</p>
             <ul>
                 <li><strong>P2P transfers</strong> use end-to-end encryption via WebRTC</li>
-                <li><strong>Cloud storage</strong> uses AES-256 encryption (client-side encryption before upload)</li>
+                <li><strong>Encrypted cloud links</strong> use AES-256 encryption before upload</li>
                 <li>Optional password protection adds an additional security layer</li>
                 <li>Transfer links expire automatically to prevent unauthorized access</li>
                 <li>Cloud files are automatically deleted after 7 days</li>
@@ -168,7 +168,7 @@
         <ul>
             <li><strong>Payment processor</strong> - Stripe for subscription management</li>
             <li><strong>Authentication</strong> - Firebase Auth for user accounts (optional)</li>
-            <li><strong>Cloud storage</strong> - Firebase Storage for Pro users (optional)</li>
+            <li><strong>Encrypted cloud links</strong> - Cloudflare R2 for Pro encrypted cloud links (optional)</li>
         </ul>
         <p>Each service has its own privacy policy, and we only share necessary information for service functionality.</p>
         
@@ -178,7 +178,7 @@
         <h3>8.1 Retention Periods</h3>
         <ul>
             <li><strong>P2P transfer metadata</strong> - Deleted immediately after transfer completion</li>
-            <li><strong>Cloud storage files</strong> - Automatically deleted after 7 days</li>
+            <li><strong>Encrypted cloud link files</strong> - Automatically deleted after 7 days</li>
             <li><strong>Account data</strong> - Retained until account deletion by user</li>
             <li><strong>Error logs</strong> - Retained for 30 days for debugging purposes</li>
             <li><strong>Payment records</strong> - Retained for 7 years as required by tax law</li>
@@ -186,7 +186,7 @@
         </ul>
         
         <h3>8.2 Data Deletion</h3>
-        <p>When data is no longer needed, we will securely delete it using industry-standard methods. For cloud storage, files are cryptographically erased and storage space is overwritten.</p>
+        <p>When data is no longer needed, we delete it according to the retention periods above. For encrypted cloud links, files are encrypted client-side before upload and are deleted after expiration.</p>
         
         <h2>9. Your Legal Rights</h2>
         

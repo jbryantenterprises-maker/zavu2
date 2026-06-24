@@ -1,11 +1,11 @@
 import { FileEncryption } from './encryption.js';
-import type { SignalData } from './webrtc.js';
+import type { SignalData, TransferMetadata } from './webrtc.js';
 
 export class FileReceiver {
   private encryptionKey: CryptoKey | null = null;
   private decryptedChunks: BlobPart[] = [];
   private receivedBytes = 0;
-  private fileMetadata: any = null;
+  private fileMetadata: TransferMetadata | null = null;
   private onProgress?: (progress: number) => void;
   private onComplete?: (file: File) => void;
   private onError?: (error: string) => void;
@@ -26,6 +26,9 @@ export class FileReceiver {
   async handleMetadata(data: SignalData) {
     if (data.encryptionKey) {
       try {
+        if (!data.files || typeof data.totalSize !== 'number') {
+          throw new Error('Transfer metadata is incomplete');
+        }
         this.encryptionKey = await FileEncryption.base64ToKey(data.encryptionKey);
         this.fileMetadata = { files: data.files, totalSize: data.totalSize };
       } catch (error) {
@@ -48,7 +51,9 @@ export class FileReceiver {
     this.decryptedChunks.push(FileEncryption.toArrayBuffer(decryptedChunk));
     this.receivedBytes += decryptedChunk.byteLength;
 
-    const progress = Math.min(Math.round((this.receivedBytes / totalSize) * 100), 100);
+    const progress = totalSize > 0
+      ? Math.min(Math.round((this.receivedBytes / totalSize) * 100), 100)
+      : 100;
 
     if (this.onProgress) {
       this.onProgress(progress);
