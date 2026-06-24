@@ -20,7 +20,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-let app;
+export let app;
 let auth: ReturnType<typeof getAuth>;
 
 try {

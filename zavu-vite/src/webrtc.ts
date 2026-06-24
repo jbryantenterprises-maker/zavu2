@@ -1,4 +1,5 @@
 import { joinRoom, selfId } from '@trystero-p2p/firebase';
+import { app as firebaseApp } from './auth.js';
 
 type TrysteroSender = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[0];
 type TrysteroReceiver = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[1];
@@ -38,7 +39,10 @@ export class WebRTCManager {
   createRoom(roomId: string) {
     this.leaveRoom();
     const config = {
-      appId: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://xavu-58a12-default-rtdb.firebaseio.com'
+      appId: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://xavu-58a12-default-rtdb.firebaseio.com',
+      relayConfig: {
+        firebaseApp: firebaseApp // Use existing Firebase app to avoid duplicate initialization
+      }
     };
     this.currentRoom = joinRoom(config, roomId);
     
