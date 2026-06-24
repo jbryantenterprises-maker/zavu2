@@ -493,7 +493,7 @@ export class XavuApp {
         UIHelper.showElement('receiver-screen');
         UIHelper.updateElementText('receiver-title', 'Incoming P2P transfer');
         UIHelper.updateElementText('receiver-sender-id', `Connecting to ${id.slice(0, 8)}…`);
-        this.connectAsReceiver(id);
+        await this.connectAsReceiver(id);
       } else if (url.pathname.includes('/api/download/') && url.hash) {
         window.location.href = link;
       } else {
@@ -605,8 +605,8 @@ export class XavuApp {
     this.senderFlowToken++;
     this.encryptionKey = await FileEncryption.generateKey();
     const roomId = existingId || crypto.randomUUID().replace(/-/g, '').substring(0, 12);
-    
-    this.webrtc.createRoom(roomId);
+
+    await this.webrtc.createRoom(roomId);
     this.isCloudTransfer = false;
     this.cloudDownloadUrls = [];
 
@@ -972,8 +972,8 @@ export class XavuApp {
   }
 
   // Receiver Mode
-  private connectAsReceiver(targetId: string) {
-    this.webrtc.joinRoom(targetId);
+  private async connectAsReceiver(targetId: string) {
+    await this.webrtc.joinRoom(targetId);
     this.webrtc.setCurrentPeer(targetId);
 
     this.setupReceiverListeners();
@@ -1109,7 +1109,7 @@ export class XavuApp {
   }
 
   // Utility Methods
-  private checkForReceiverLink() {
+  private async checkForReceiverLink() {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
     if (id) {
@@ -1117,7 +1117,7 @@ export class XavuApp {
       UIHelper.showElement('receiver-screen');
       UIHelper.updateElementText('receiver-title', 'Incoming P2P transfer');
       UIHelper.updateElementText('receiver-sender-id', `Connecting to peer ${id.slice(0, 8)}…`);
-      this.connectAsReceiver(id);
+      await this.connectAsReceiver(id);
     }
   }
 

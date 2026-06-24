@@ -38,7 +38,7 @@ export class WebRTCManager {
   private sendChunk: TrysteroSender | null = null;
   private getChunk: TrysteroReceiver | null = null;
 
-  createRoom(roomId: string) {
+  async createRoom(roomId: string) {
     this.leaveRoom();
 
     // Use existing Firebase app or create a new one for Trystero
@@ -103,8 +103,8 @@ export class WebRTCManager {
     return this.currentRoom;
   }
 
-  joinRoom(roomId: string) {
-    return this.createRoom(roomId);
+  async joinRoom(roomId: string) {
+    return await this.createRoom(roomId);
   }
 
   leaveRoom() {
