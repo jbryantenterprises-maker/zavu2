@@ -19,6 +19,7 @@
     "vite": "^8.0.1"
   },
   "dependencies": {
+    "@trystero-p2p/firebase": "^0.25.2",
     "firebase": "^12.11.0",
     "jose": "^6.2.2",
     "qrcode": "^1.5.4",

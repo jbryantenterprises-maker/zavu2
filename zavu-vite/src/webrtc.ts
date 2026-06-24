@@ -1,4 +1,4 @@
-import { joinRoom, selfId } from 'trystero';
+import { joinRoom, selfId } from '@trystero-p2p/firebase';
 
 type TrysteroSender = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[0];
 type TrysteroReceiver = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[1];
@@ -38,13 +38,7 @@ export class WebRTCManager {
   createRoom(roomId: string) {
     this.leaveRoom();
     const config = {
-      appId: 'xavu-p2p-production-app',
-      // Use alternative relay servers that are less restrictive
-      relay: [
-        'wss://relay.damus.io',
-        'wss://purplepag.es',
-        'wss://nos.lol'
-      ]
+      appId: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://xavu-58a12-default-rtdb.firebaseio.com'
     };
     this.currentRoom = joinRoom(config, roomId);
     
