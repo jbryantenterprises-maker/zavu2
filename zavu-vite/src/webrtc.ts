@@ -55,6 +55,7 @@ export class WebRTCManager {
           databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL
         };
         firebaseApp = initializeApp(firebaseConfig, 'trystero-firebase');
+        console.log('Created new Firebase app for Trystero');
       } catch (e) {
         console.error('Failed to initialize Firebase for Trystero:', e);
       }
@@ -64,12 +65,15 @@ export class WebRTCManager {
       appId: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://xavu-58a12-default-rtdb.firebaseio.com',
       ...(firebaseApp && { relayConfig: { firebaseApp } }) // Only add if Firebase app exists
     };
+
+    console.log('Creating Trystero room with config:', { roomId, hasFirebaseApp: !!firebaseApp });
     this.currentRoom = joinRoom(config, roomId);
 
     // makeAction returns a single object, not an array
     this.sendSignal = this.currentRoom.makeAction('signal');
     this.sendChunk = this.currentRoom.makeAction('chunk');
 
+    console.log('Created actions for room');
     return this.currentRoom;
   }
 
@@ -91,7 +95,10 @@ export class WebRTCManager {
 
   onPeerJoin(callback: (peerId: string) => void) {
     if (this.currentRoom) {
+      console.log('Setting onPeerJoin callback');
       this.currentRoom.onPeerJoin = callback;
+    } else {
+      console.warn('Cannot set onPeerJoin - no current room');
     }
   }
 
