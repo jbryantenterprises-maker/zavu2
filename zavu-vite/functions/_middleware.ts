@@ -80,7 +80,7 @@ function defaultContentSecurityPolicy(): string {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://xavu-58a12-default-rtdb.firebaseio.com https://*.firebaseio.com https://*.rtdb.firebaseio.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://xavu-58a12-default-rtdb.firebaseio.com https://*.firebaseio.com https://*.rtdb.firebaseio.com https://*.googleapis.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob:",

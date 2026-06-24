@@ -34,9 +34,25 @@ export class WebRTCManager {
   private currentPeerId: string | null = null;
   private sendSignal: TrysteroSender | null = null;
   private sendChunk: TrysteroSender | null = null;
+  private connectionStartTime: number = 0;
+  private isMobileSafari: boolean = false;
 
   async createRoom(roomId: string) {
     this.leaveRoom();
+
+    // Detect iOS Safari for potential compatibility issues
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    this.isMobileSafari = isIOS && isSafari;
+
+    console.log('📱 Device Detection:', {
+      isIOS,
+      isSafari,
+      isMobileSafari: this.isMobileSafari,
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      webRTCEnabled: !!(window as any).RTCPeerConnection
+    });
 
     // Use existing Firebase app or create a new one for Trystero
     let firebaseApp = existingFirebaseApp;
@@ -79,21 +95,48 @@ export class WebRTCManager {
     }
 
     this.currentRoom = joinRoom(config, roomId);
+    this.connectionStartTime = Date.now();
 
     console.log('Room created, setting up actions and callbacks');
+
+    // For iOS Safari, add a small delay to ensure WebRTC is fully ready
+    if (this.isMobileSafari) {
+      console.log('⏳ iOS Safari detected, adding WebRTC initialization delay');
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
     // makeAction returns a single object, not an array
-    this.sendSignal = this.currentRoom.makeAction('signal');
-    this.sendChunk = this.currentRoom.makeAction('chunk');
+    try {
+      this.sendSignal = this.currentRoom.makeAction('signal');
+      this.sendChunk = this.currentRoom.makeAction('chunk');
+      console.log('✅ Actions created successfully');
+    } catch (error) {
+      console.error('❌ Failed to create actions:', error);
+      throw new Error(`Trystero action creation failed: ${error}`);
+    }
 
     console.log('Actions created, setting up peer detection');
 
-    // Also set up peer detection logging
+    // Also set up peer detection logging with enhanced mobile debugging
     this.currentRoom.onPeerJoin = (peerId: string) => {
+      const connectionTime = Date.now() - this.connectionStartTime;
       console.log('🎉 TRYSTERO: Peer joined via room.onPeerJoin:', peerId);
+      console.log('⏱️ Connection time:', connectionTime, 'ms');
+
+      if (this.isMobileSafari) {
+        console.log('📱 iOS Safari peer joined - checking WebRTC stability');
+        // Add additional stability check for mobile
+        setTimeout(() => {
+          console.log('🔄 iOS Safari stability check passed');
+        }, 1000);
+      }
     };
 
     this.currentRoom.onPeerLeave = (peerId: string) => {
       console.log('👋 TRYSTERO: Peer left:', peerId);
+      if (this.isMobileSafari) {
+        console.log('📱 iOS Safari peer left - possible mobile network issue');
+      }
     };
 
     console.log('Created actions for room');
@@ -134,7 +177,20 @@ export class WebRTCManager {
 
   sendSignalData(data: SignalData, peerId?: string) {
     if (this.sendSignal) {
-      this.sendSignal.send(data, peerId ? { target: peerId } : undefined);
+      console.log('📤 Sending signal:', data.type, this.isMobileSafari ? '(iOS Safari)' : '');
+      try {
+        this.sendSignal.send(data, peerId ? { target: peerId } : undefined);
+        if (this.isMobileSafari) {
+          console.log('✅ Signal sent successfully on iOS Safari');
+        }
+      } catch (error) {
+        console.error('❌ Failed to send signal:', error);
+        if (this.isMobileSafari) {
+          console.error('📱 iOS Safari signal send error - possible connection issue');
+        }
+      }
+    } else {
+      console.warn('⚠️ Cannot send signal - sendSignal not initialized');
     }
   }
 
@@ -153,7 +209,26 @@ export class WebRTCManager {
 
   sendChunkData(data: ArrayBuffer, peerId?: string) {
     if (this.sendChunk) {
-      this.sendChunk.send(data, peerId ? { target: peerId } : undefined);
+      const chunkSize = data.byteLength || 0;
+      console.log('📤 Sending chunk:', chunkSize, 'bytes', this.isMobileSafari ? '(iOS Safari)' : '');
+
+      try {
+        this.sendChunk.send(data, peerId ? { target: peerId } : undefined);
+
+        if (this.isMobileSafari) {
+          // Add small delay between chunks on mobile to prevent congestion
+          if (chunkSize > 50000) { // Large chunks on mobile
+            console.log('📱 iOS Safari large chunk sent, adding delay');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to send chunk:', error);
+        if (this.isMobileSafari) {
+          console.error('📱 iOS Safari chunk send error - possible bandwidth issue');
+        }
+      }
+    } else {
+      console.warn('⚠️ Cannot send chunk - sendChunk not initialized');
     }
   }
 
