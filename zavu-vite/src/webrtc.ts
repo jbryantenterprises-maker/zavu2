@@ -163,8 +163,20 @@ export class WebRTCManager {
       console.log('Setting up chunk receive handler');
       this.sendChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
         console.log('📦 Received chunk data, size:', data?.byteLength || data?.length || 0);
+        console.log('🔍 Data type:', data?.constructor?.name, typeof data);
+        console.log('🔍 Is ArrayBuffer?', data instanceof ArrayBuffer);
+        console.log('🔍 Has callback?', typeof callback === 'function');
+
         if (data instanceof ArrayBuffer) {
-          callback(data, peerId);
+          console.log('🚀 Invoking callback with peer:', peerId);
+          try {
+            callback(data, peerId);
+            console.log('✅ Callback invoked successfully');
+          } catch (error) {
+            console.error('❌ Callback error:', error);
+          }
+        } else {
+          console.warn('⚠️ Data is not ArrayBuffer, skipping callback');
         }
       };
     }
