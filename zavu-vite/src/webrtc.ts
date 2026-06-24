@@ -34,9 +34,7 @@ export class WebRTCManager {
   private currentRoom: ReturnType<typeof joinRoom> | null = null;
   private currentPeerId: string | null = null;
   private sendSignal: TrysteroSender | null = null;
-  private getSignal: TrysteroReceiver | null = null;
   private sendChunk: TrysteroSender | null = null;
-  private getChunk: TrysteroReceiver | null = null;
 
   async createRoom(roomId: string) {
     this.leaveRoom();
@@ -114,9 +112,7 @@ export class WebRTCManager {
     }
     this.currentPeerId = null;
     this.sendSignal = null;
-    this.getSignal = null;
     this.sendChunk = null;
-    this.getChunk = null;
   }
 
   onPeerJoin(callback: (peerId: string) => void) {
