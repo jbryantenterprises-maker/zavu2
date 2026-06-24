@@ -794,6 +794,11 @@ export class XavuApp {
         }
 
         const encryptedChunk = await FileEncryption.encryptChunk(value, this.encryptionKey!);
+        console.log('📤 Sending chunk:', {
+          originalSize: value.byteLength,
+          encryptedSize: encryptedChunk.byteLength,
+          peerTarget
+        });
         this.webrtc.sendChunkData(FileEncryption.toArrayBuffer(encryptedChunk), peerTarget);
         this.unackedChunks++;
 
@@ -1085,11 +1090,17 @@ export class XavuApp {
     });
 
     this.webrtc.onChunk(async (chunk: ArrayBuffer, peerId: string) => {
+      console.log('📦 Received chunk from peer:', {
+        peerId,
+        chunkSize: chunk.byteLength,
+        chunkPreview: chunk.slice(0, 16)
+      });
       const metadata = this.fileReceiver?.getMetadata();
       const currentSize = metadata?.files?.[this.currentReceivingFileIndex]?.size || metadata?.totalSize || 1;
 
       try {
         await this.fileReceiver?.handleChunk(chunk, currentSize);
+        console.log('✅ Chunk handled successfully');
         // Send ack to maintain backpressure
         this.webrtc.sendSignalData({ type: 'ack_chunk' }, peerId);
       } catch (error) {

@@ -43,17 +43,30 @@ export class FileReceiver {
    * Handle incoming encrypted chunk
    */
   async handleChunk(chunk: ArrayBuffer, totalSize: number) {
+    console.log('🔐 FileReceiver.handleChunk:', {
+      chunkSize: chunk.byteLength,
+      totalSize,
+      hasEncryptionKey: !!this.encryptionKey
+    });
+
     if (!this.encryptionKey) {
       throw new Error('Encryption key not available');
     }
 
     const decryptedChunk = await FileEncryption.decryptChunk(chunk, this.encryptionKey);
+    console.log('🔓 Decrypted chunk:', {
+      decryptedSize: decryptedChunk.byteLength,
+      totalReceived: this.receivedBytes + decryptedChunk.byteLength
+    });
+
     this.decryptedChunks.push(FileEncryption.toArrayBuffer(decryptedChunk));
     this.receivedBytes += decryptedChunk.byteLength;
 
     const progress = totalSize > 0
       ? Math.min(Math.round((this.receivedBytes / totalSize) * 100), 100)
       : 100;
+
+    console.log('📊 Progress:', { receivedBytes: this.receivedBytes, totalSize, progress });
 
     if (this.onProgress) {
       this.onProgress(progress);
@@ -65,6 +78,13 @@ export class FileReceiver {
    */
   async completeFile(fileName: string, mimeType: string): Promise<File | null> {
     try {
+      console.log('📁 Completing file:', {
+        fileName,
+        mimeType,
+        chunksCount: this.decryptedChunks.length,
+        totalReceivedBytes: this.receivedBytes
+      });
+
       if (!this.encryptionKey) {
         throw new Error('Encryption keys not available');
       }
@@ -74,12 +94,19 @@ export class FileReceiver {
         type: mimeType || 'application/octet-stream'
       });
 
+      console.log('✅ File created:', {
+        fileName,
+        fileSize: decryptedFile.size,
+        fileType: decryptedFile.type
+      });
+
       if (this.onComplete) {
         this.onComplete(decryptedFile);
       }
 
       return decryptedFile;
     } catch (error) {
+      console.error('❌ File completion error:', error);
       if (this.onError) {
         this.onError(`File decryption failed: ${error}`);
       }
