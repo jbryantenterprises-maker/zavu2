@@ -163,20 +163,26 @@ export class WebRTCManager {
       console.log('Setting up chunk receive handler');
       this.sendChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
         console.log('📦 Received chunk data, size:', data?.byteLength || data?.length || 0);
-        console.log('🔍 Data type:', data?.constructor?.name, typeof data);
-        console.log('🔍 Is ArrayBuffer?', data instanceof ArrayBuffer);
-        console.log('🔍 Has callback?', typeof callback === 'function');
 
+        // Convert Uint8Array to ArrayBuffer if needed
+        let arrayBufferData: ArrayBuffer;
         if (data instanceof ArrayBuffer) {
-          console.log('🚀 Invoking callback with peer:', peerId);
-          try {
-            callback(data, peerId);
-            console.log('✅ Callback invoked successfully');
-          } catch (error) {
-            console.error('❌ Callback error:', error);
-          }
+          arrayBufferData = data;
+        } else if (data instanceof Uint8Array) {
+          // Convert Uint8Array to ArrayBuffer
+          arrayBufferData = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+          console.log('🔄 Converted Uint8Array to ArrayBuffer');
         } else {
-          console.warn('⚠️ Data is not ArrayBuffer, skipping callback');
+          console.warn('⚠️ Unknown data type:', data?.constructor?.name, 'skipping callback');
+          return;
+        }
+
+        console.log('🚀 Invoking callback with peer:', peerId);
+        try {
+          callback(arrayBufferData, peerId);
+          console.log('✅ Callback invoked successfully');
+        } catch (error) {
+          console.error('❌ Callback error:', error);
         }
       };
     }
