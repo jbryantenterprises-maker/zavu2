@@ -1,5 +1,6 @@
 import { joinRoom, selfId } from '@trystero-p2p/firebase';
-import { app as firebaseApp } from './auth.js';
+import { app as existingFirebaseApp } from './auth.js';
+import { initializeApp } from 'firebase/app';
 
 type TrysteroSender = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[0];
 type TrysteroReceiver = ReturnType<ReturnType<typeof joinRoom>['makeAction']>[1];
@@ -38,11 +39,29 @@ export class WebRTCManager {
 
   createRoom(roomId: string) {
     this.leaveRoom();
+
+    // Use existing Firebase app or create a new one for Trystero
+    let firebaseApp = existingFirebaseApp;
+    if (!firebaseApp) {
+      try {
+        const firebaseConfig = {
+          apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+          authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+          projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+          storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+          messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+          appId: import.meta.env.VITE_FIREBASE_APP_ID,
+          databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL
+        };
+        firebaseApp = initializeApp(firebaseConfig, 'trystero-firebase');
+      } catch (e) {
+        console.error('Failed to initialize Firebase for Trystero:', e);
+      }
+    }
+
     const config = {
       appId: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://xavu-58a12-default-rtdb.firebaseio.com',
-      relayConfig: {
-        firebaseApp: firebaseApp // Use existing Firebase app to avoid duplicate initialization
-      }
+      ...(firebaseApp && { relayConfig: { firebaseApp } }) // Only add if Firebase app exists
     };
     this.currentRoom = joinRoom(config, roomId);
     
