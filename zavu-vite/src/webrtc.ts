@@ -67,6 +67,20 @@ export class WebRTCManager {
     };
 
     console.log('Creating Trystero room with config:', { roomId, hasFirebaseApp: !!firebaseApp, appId: config.appId });
+
+    // Test Firebase connection
+    try {
+      const { getDatabase, ref, set } = await import('firebase/database');
+      if (firebaseApp) {
+        const db = getDatabase(firebaseApp);
+        const testRef = ref(db, '__trystero__/test');
+        await set(testRef, { timestamp: Date.now() });
+        console.log('✅ Firebase Realtime Database write test passed');
+      }
+    } catch (error) {
+      console.error('❌ Firebase Realtime Database test failed:', error);
+    }
+
     this.currentRoom = joinRoom(config, roomId);
 
     console.log('Room created, setting up actions and callbacks');
