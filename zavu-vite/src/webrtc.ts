@@ -66,12 +66,24 @@ export class WebRTCManager {
       ...(firebaseApp && { relayConfig: { firebaseApp } }) // Only add if Firebase app exists
     };
 
-    console.log('Creating Trystero room with config:', { roomId, hasFirebaseApp: !!firebaseApp });
+    console.log('Creating Trystero room with config:', { roomId, hasFirebaseApp: !!firebaseApp, appId: config.appId });
     this.currentRoom = joinRoom(config, roomId);
 
+    console.log('Room created, setting up actions and callbacks');
     // makeAction returns a single object, not an array
     this.sendSignal = this.currentRoom.makeAction('signal');
     this.sendChunk = this.currentRoom.makeAction('chunk');
+
+    console.log('Actions created, setting up peer detection');
+
+    // Also set up peer detection logging
+    this.currentRoom.onPeerJoin = (peerId: string) => {
+      console.log('🎉 TRYSTERO: Peer joined via room.onPeerJoin:', peerId);
+    };
+
+    this.currentRoom.onPeerLeave = (peerId: string) => {
+      console.log('👋 TRYSTERO: Peer left:', peerId);
+    };
 
     console.log('Created actions for room');
     return this.currentRoom;
@@ -96,7 +108,10 @@ export class WebRTCManager {
   onPeerJoin(callback: (peerId: string) => void) {
     if (this.currentRoom) {
       console.log('Setting onPeerJoin callback');
-      this.currentRoom.onPeerJoin = callback;
+      this.currentRoom.onPeerJoin = (peerId: string) => {
+        console.log('🎉 PEER JOINED:', peerId);
+        callback(peerId);
+      };
     } else {
       console.warn('Cannot set onPeerJoin - no current room');
     }
