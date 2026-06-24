@@ -4,7 +4,6 @@ import { initializeApp } from 'firebase/app';
 
 // Simplified Trystero types - using 'any' to avoid type conflicts
 type TrysteroSender = any;
-type TrysteroReceiver = any;
 
 export interface FileMetadata {
   name: string;

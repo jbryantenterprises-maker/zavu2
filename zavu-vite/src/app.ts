@@ -704,7 +704,9 @@ export class XavuApp {
 
     this.webrtc.onSignal((data: SignalData, peerId: string) => {
       if (flowToken !== this.senderFlowToken || this.isCloudTransfer) return;
+      console.log('📨 Sender received signal:', data.type, 'from peer:', peerId);
       if (data.type === 'start_download') {
+        console.log('🚀 Starting multi-file transfer to peer:', peerId);
         this.startMultiFileTransfer(peerId, data.fileIndex || 0, data.offset || 0);
       } else if (data.type === 'ack_chunk') {
         this.unackedChunks = Math.max(0, this.unackedChunks - 1);
@@ -972,16 +974,18 @@ export class XavuApp {
   }
 
   // Receiver Mode
+  private receiverConnected = false; // Track actual sender connection
+
   private async connectAsReceiver(targetId: string) {
     await this.webrtc.joinRoom(targetId);
-    this.webrtc.setCurrentPeer(targetId);
+    this.receiverConnected = false; // Reset connection state
 
     this.setupReceiverListeners();
 
     // Set timeout for receiver connection
     setTimeout(() => {
-      if (!this.webrtc.getCurrentPeer() || this.webrtc.getCurrentPeer() === targetId) {
-        // Still using the initial targetId means we haven't connected to the actual sender yet
+      if (!this.receiverConnected) {
+        // Haven't connected to the actual sender yet
         UIHelper.updateElement('receiver-progress-text', `
           Unable to connect to sender<br>
           <span class="text-xs text-zinc-500">
@@ -996,6 +1000,7 @@ export class XavuApp {
   private setupReceiverListeners() {
     this.webrtc.onPeerJoin((peerId) => {
       Logger.debug('Detected connected peer in room.');
+      this.receiverConnected = true; // Mark that we've connected to the sender
       // Save the sender's real peer ID so we can request the download from them
       this.webrtc.setCurrentPeer(peerId);
     });
@@ -1036,40 +1041,45 @@ export class XavuApp {
     );
 
     this.webrtc.onSignal(async (data: SignalData) => {
+      console.log('📨 Receiver received signal:', data.type);
       if (data.type === 'metadata') {
+        console.log('📋 Received file metadata:', data.files);
         await this.fileReceiver?.handleMetadata(data);
-        
+
         // Show file info in UI
         if (data.files && data.files.length > 0) {
           const files = data.files;
           const displayNames = files.map(f => f.name).join(', ');
           const totalSizeText = formatBytes(data.totalSize || files.reduce((acc, f) => acc + f.size, 0));
-          
+
           UIHelper.updateElementText('incoming-file-name', files.length > 1 ? `${files.length} files (${displayNames})` : displayNames);
           UIHelper.updateElementText('incoming-file-size', totalSizeText);
-          
+
           // Switch UI state
           UIHelper.hideElement('receiver-waiting');
           UIHelper.showElement('receiver-connected');
         }
       } else if (data.type === 'next_file') {
+        console.log('📁 Starting next file:', data.name);
         // Setup for next file
         this.currentReceivingFileIndex = data.index || 0;
         this.fileReceiver?.reset();
         UIHelper.updateElementText('receiver-progress-text', `Preparing file ${data.name}...`);
         UIHelper.setProgressBar('receiver-progress-bar', 0);
       } else if (data.type === 'file_end') {
+        console.log('✅ File ended, completing file:', data.index);
         const metadata = this.fileReceiver?.getMetadata();
         if (metadata && metadata.files && metadata.files[this.currentReceivingFileIndex]) {
           const fileMeta = metadata.files[this.currentReceivingFileIndex];
           UIHelper.updateElementText('receiver-progress-text', 'Decrypting data (this may take a moment)...');
-          
+
           // Yield to let UI update
           setTimeout(async () => {
              await this.fileReceiver?.completeFile(fileMeta.name, fileMeta.mime);
           }, 50);
         }
       } else if (data.type === 'end_all') {
+        console.log('🎉 All files transferred');
         UIHelper.updateElementText('receiver-progress-text', 'All files transferred completely! 🎉');
       }
     });
@@ -1101,10 +1111,14 @@ export class XavuApp {
       // Hide the download button since it's starting
       const button = document.querySelector('#receiver-connected button') as HTMLElement;
       if (button) button.style.display = 'none';
-      
+
+      console.log('📤 Sending start_download signal to peer:', peer);
       this.webrtc.sendSignalData({ type: 'start_download' }, peer);
       UIHelper.showElement('receiver-progress-area');
       UIHelper.updateElementText('receiver-progress-text', 'Connecting and requesting file...');
+    } else {
+      console.error('❌ Cannot start download - no peer connected');
+      UIHelper.updateElementText('receiver-progress-text', '❌ Error: No peer connected. Please wait for the sender to be ready.');
     }
   }
 
