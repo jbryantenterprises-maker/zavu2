@@ -65,9 +65,10 @@ export class WebRTCManager {
       ...(firebaseApp && { relayConfig: { firebaseApp } }) // Only add if Firebase app exists
     };
     this.currentRoom = joinRoom(config, roomId);
-    
-    [this.sendSignal, this.getSignal] = this.currentRoom.makeAction('signal');
-    [this.sendChunk, this.getChunk] = this.currentRoom.makeAction('chunk');
+
+    // makeAction returns a single object, not an array
+    this.sendSignal = this.currentRoom.makeAction('signal');
+    this.sendChunk = this.currentRoom.makeAction('chunk');
 
     return this.currentRoom;
   }
@@ -102,11 +103,13 @@ export class WebRTCManager {
 
   sendSignalData(data: SignalData, peerId?: string) {
     if (this.sendSignal) {
-      this.sendSignal(data as Parameters<TrysteroSender>[0], peerId);
+      this.sendSignal.send(data, peerId ? { target: peerId } : undefined);
     }
   }
 
   onSignal(callback: (data: SignalData, peerId: string) => void) {
+    // Create a new action for receiving signals
+    this.getSignal = this.currentRoom?.makeAction('signal');
     if (this.getSignal) {
       this.getSignal.onMessage = (data: any, { peerId }: { peerId: string }) => {
         if (isSignalData(data)) {
@@ -118,11 +121,13 @@ export class WebRTCManager {
 
   sendChunkData(data: ArrayBuffer, peerId?: string) {
     if (this.sendChunk) {
-      this.sendChunk(data as Parameters<TrysteroSender>[0], peerId);
+      this.sendChunk.send(data, peerId ? { target: peerId } : undefined);
     }
   }
 
   onChunk(callback: (data: ArrayBuffer, peerId: string) => void) {
+    // Create a new action for receiving chunks
+    this.getChunk = this.currentRoom?.makeAction('chunk');
     if (this.getChunk) {
       this.getChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
         if (data instanceof ArrayBuffer) {
