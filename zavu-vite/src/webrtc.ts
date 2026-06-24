@@ -144,10 +144,11 @@ export class WebRTCManager {
   }
 
   onSignal(callback: (data: SignalData, peerId: string) => void) {
-    // Create a new action for receiving signals
-    this.getSignal = this.currentRoom?.makeAction('signal');
-    if (this.getSignal) {
-      this.getSignal.onMessage = (data: any, { peerId }: { peerId: string }) => {
+    // Use the existing action, don't create a new one
+    if (this.sendSignal) {
+      console.log('Setting up signal receive handler');
+      this.sendSignal.onMessage = (data: any, { peerId }: { peerId: string }) => {
+        console.log('📨 Received signal data:', data);
         if (isSignalData(data)) {
           callback(data, peerId);
         }
@@ -162,10 +163,11 @@ export class WebRTCManager {
   }
 
   onChunk(callback: (data: ArrayBuffer, peerId: string) => void) {
-    // Create a new action for receiving chunks
-    this.getChunk = this.currentRoom?.makeAction('chunk');
-    if (this.getChunk) {
-      this.getChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
+    // Use the existing action, don't create a new one
+    if (this.sendChunk) {
+      console.log('Setting up chunk receive handler');
+      this.sendChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
+        console.log('📦 Received chunk data, size:', data?.byteLength || data?.length || 0);
         if (data instanceof ArrayBuffer) {
           callback(data, peerId);
         }
