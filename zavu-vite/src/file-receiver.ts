@@ -9,6 +9,9 @@ export class FileReceiver {
   private onProgress?: (progress: number) => void;
   private onComplete?: (file: File) => void;
   private onError?: (error: string) => void;
+  private pendingChunks: Array<{ chunk: ArrayBuffer; totalSize: number }> = [];
+  private keyRetryTimer: NodeJS.Timeout | null = null;
+  private readonly KEY_RETRY_TIMEOUT_MS = 10000; // 10 seconds to wait for encryption key
 
   constructor(
     onProgress?: (progress: number) => void,
@@ -31,6 +34,22 @@ export class FileReceiver {
         }
         this.encryptionKey = await FileEncryption.base64ToKey(data.encryptionKey);
         this.fileMetadata = { files: data.files, totalSize: data.totalSize };
+        
+        // Clear any pending retry timer
+        if (this.keyRetryTimer) {
+          clearTimeout(this.keyRetryTimer);
+          this.keyRetryTimer = null;
+        }
+        
+        // Process any pending chunks that were waiting for the encryption key
+        if (this.pendingChunks.length > 0) {
+          console.log('🔐 Processing pending chunks after receiving encryption key');
+          const pending = [...this.pendingChunks];
+          this.pendingChunks = [];
+          for (const { chunk, totalSize } of pending) {
+            await this.handleChunk(chunk, totalSize);
+          }
+        }
       } catch (error) {
         if (this.onError) {
           this.onError(`Failed to setup encryption: ${error}`);
@@ -50,7 +69,24 @@ export class FileReceiver {
     });
 
     if (!this.encryptionKey) {
-      throw new Error('Encryption key not available');
+      // Store chunk for later processing when encryption key arrives
+      console.log('⏳ Encryption key not available, storing chunk for retry');
+      this.pendingChunks.push({ chunk, totalSize });
+      
+      // Set up retry timer if not already set
+      if (!this.keyRetryTimer) {
+        this.keyRetryTimer = setTimeout(() => {
+          if (!this.encryptionKey && this.pendingChunks.length > 0) {
+            console.error('❌ Timeout waiting for encryption key');
+            if (this.onError) {
+              this.onError('Encryption key not received within timeout period');
+            }
+            this.pendingChunks = [];
+          }
+          this.keyRetryTimer = null;
+        }, this.KEY_RETRY_TIMEOUT_MS);
+      }
+      return;
     }
 
     const decryptedChunk = await FileEncryption.decryptChunk(chunk, this.encryptionKey);
@@ -120,6 +156,11 @@ export class FileReceiver {
   reset() {
     this.decryptedChunks = [];
     this.receivedBytes = 0;
+    this.pendingChunks = [];
+    if (this.keyRetryTimer) {
+      clearTimeout(this.keyRetryTimer);
+      this.keyRetryTimer = null;
+    }
   }
 
   /**

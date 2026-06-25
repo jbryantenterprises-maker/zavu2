@@ -473,6 +473,11 @@ export class XavuApp {
       UIHelper.confettiBurst();
     } else {
       UIHelper.updateElementText('receiver-progress-text', `❌ ${result.error}`);
+      // Clean up Object URL on cloud download error
+      if (this.activeDownloadLink) {
+        URL.revokeObjectURL(this.activeDownloadLink);
+        this.activeDownloadLink = null;
+      }
       if (params.isPasswordProtected) {
         UIHelper.hideElement('receiver-progress-area');
         UIHelper.showElement('receiver-connected');
@@ -799,6 +804,7 @@ export class XavuApp {
 
         const { done, value } = await reader.read();
         if (done) {
+          // Add timeout mechanism to prevent indefinite hanging
           const waitAcks = setInterval(() => {
             if (this.unackedChunks === 0) {
               clearInterval(waitAcks);
@@ -808,6 +814,17 @@ export class XavuApp {
               }, 50);
             }
           }, 50);
+          
+          // Timeout after 30 seconds if no acks received
+          setTimeout(() => {
+            if (this.unackedChunks > 0) {
+              clearInterval(waitAcks);
+              console.warn('Timeout waiting for acknowledgments, proceeding anyway');
+              this.webrtc.sendSignalData({ type: 'file_end', index: index }, peerTarget);
+              sendFile(index + 1, 0);
+            }
+          }, 30000);
+          
           return;
         }
 
@@ -1061,6 +1078,11 @@ export class XavuApp {
       (error) => {
         Logger.error('Receiver error:', error);
         UIHelper.updateElementText('receiver-progress-text', `❌ Error: ${error}`);
+        // Clean up Object URL on error
+        if (this.activeDownloadLink) {
+          URL.revokeObjectURL(this.activeDownloadLink);
+          this.activeDownloadLink = null;
+        }
       }
     );
 
@@ -1125,12 +1147,22 @@ export class XavuApp {
       } catch (error) {
         Logger.error('Receiver chunk error:', error);
         UIHelper.updateElementText('receiver-progress-text', '❌ Error: Failed to decrypt transfer chunk.');
+        // Clean up Object URL on error
+        if (this.activeDownloadLink) {
+          URL.revokeObjectURL(this.activeDownloadLink);
+          this.activeDownloadLink = null;
+        }
       }
     });
 
     this.webrtc.onPeerLeave((peerId) => {
       if (peerId === this.webrtc.getCurrentPeer()) {
         UIHelper.updateElementText('receiver-progress-text', '❌ Error: Sender disconnected mid-transfer.');
+        // Clean up Object URL on disconnect
+        if (this.activeDownloadLink) {
+          URL.revokeObjectURL(this.activeDownloadLink);
+          this.activeDownloadLink = null;
+        }
       }
     });
   }
@@ -1166,6 +1198,11 @@ export class XavuApp {
   }
 
   cancelTransfer() {
+    // Clean up Object URL before cancelling
+    if (this.activeDownloadLink) {
+      URL.revokeObjectURL(this.activeDownloadLink);
+      this.activeDownloadLink = null;
+    }
     this.webrtc.leaveRoom();
     window.location.reload();
   }
