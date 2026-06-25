@@ -10,6 +10,30 @@ import {
 import type { User as FirebaseUser } from "firebase/auth";
 import { Logger } from './logger';
 
+// Validate required environment variables
+function validateFirebaseConfig(): boolean {
+  const requiredVars = [
+    'VITE_FIREBASE_API_KEY',
+    'VITE_FIREBASE_AUTH_DOMAIN',
+    'VITE_FIREBASE_PROJECT_ID',
+    'VITE_FIREBASE_STORAGE_BUCKET',
+    'VITE_FIREBASE_MESSAGING_SENDER_ID',
+    'VITE_FIREBASE_APP_ID'
+  ];
+
+  const missingVars = requiredVars.filter(varName => {
+    const value = import.meta.env[varName];
+    return !value || value.trim() === '';
+  });
+
+  if (missingVars.length > 0) {
+    Logger.error(`Missing required Firebase environment variables: ${missingVars.join(', ')}`);
+    return false;
+  }
+
+  return true;
+}
+
 // Firebase config using Vite Environment Variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -24,6 +48,9 @@ export let app: FirebaseApp | undefined;
 let auth: ReturnType<typeof getAuth>;
 
 try {
+  if (!validateFirebaseConfig()) {
+    throw new Error('Firebase configuration is incomplete');
+  }
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
 } catch (e) {
@@ -196,7 +223,8 @@ export class AuthService {
       await this.syncUserFromFirebase(currentUser, forceRefresh);
       this.notifyListeners();
       return token;
-    } catch {
+    } catch (error) {
+      Logger.error("Failed to refresh ID token:", error);
       return null;
     }
   }

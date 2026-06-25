@@ -34,10 +34,13 @@ export class PaymentService {
 
       const result = await response.json() as { success: boolean; url?: string; error?: string };
       if (!response.ok || !result.success || !result.url) {
+        this.billingPortalInProgress = false;
         throw new Error(result.error || `Billing portal failed (HTTP ${response.status})`);
       }
 
       window.location.assign(result.url);
+      // Note: Flag will remain true since we're navigating away, but reset it for safety
+      setTimeout(() => { this.billingPortalInProgress = false; }, 1000);
       return { success: true };
     } catch (e) {
       Logger.error("Failed to open billing portal", e);
@@ -79,10 +82,13 @@ export class PaymentService {
       if (!response.ok || !result.success || !result.checkoutUrl) {
         const errorMsg = result.error || `Checkout failed (HTTP ${response.status})`;
         Logger.error('Checkout API error', errorMsg, result);
+        this.checkoutInProgress = false;
         throw new Error(errorMsg);
       }
 
       window.location.assign(result.checkoutUrl);
+      // Note: Flag will remain true since we're navigating away, but reset it for safety
+      setTimeout(() => { this.checkoutInProgress = false; }, 1000);
       return { success: true };
     } catch (e) {
       Logger.error("Failed to trigger checkout", e);

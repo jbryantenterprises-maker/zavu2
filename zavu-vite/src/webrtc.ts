@@ -2,8 +2,11 @@ import { joinRoom, selfId } from '@trystero-p2p/firebase';
 import { app as existingFirebaseApp } from './auth.js';
 import { initializeApp } from 'firebase/app';
 
-// Simplified Trystero types - using 'any' to avoid type conflicts
-type TrysteroSender = any;
+// Proper Trystero type definitions
+interface TrysteroSender {
+  send: (data: unknown, options?: { target?: string }) => void;
+  onMessage: ((data: unknown, meta: { peerId: string }) => void) | null;
+}
 
 export interface FileMetadata {
   name: string;
@@ -58,6 +61,12 @@ export class WebRTCManager {
     let firebaseApp = existingFirebaseApp;
     if (!firebaseApp) {
       try {
+        // Validate required environment variables
+        const databaseUrl = import.meta.env.VITE_FIREBASE_DATABASE_URL;
+        if (!databaseUrl || databaseUrl.trim() === '') {
+          throw new Error('VITE_FIREBASE_DATABASE_URL is required for WebRTC functionality');
+        }
+
         const firebaseConfig = {
           apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
           authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -65,12 +74,13 @@ export class WebRTCManager {
           storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
           messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
           appId: import.meta.env.VITE_FIREBASE_APP_ID,
-          databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL
+          databaseURL: databaseUrl
         };
         firebaseApp = initializeApp(firebaseConfig, 'trystero-firebase');
         console.log('Created new Firebase app for Trystero');
       } catch (e) {
         console.error('Failed to initialize Firebase for Trystero:', e);
+        throw new Error('WebRTC functionality requires Firebase configuration. Please check your environment variables.');
       }
     }
 
@@ -267,7 +277,7 @@ export class WebRTCManager {
     // Use the existing action, don't create a new one
     if (this.sendSignal) {
       console.log('Setting up signal receive handler');
-      this.sendSignal.onMessage = (data: any, { peerId }: { peerId: string }) => {
+      this.sendSignal.onMessage = (data: unknown, { peerId }: { peerId: string }) => {
         console.log('📨 Received signal data:', data);
         if (isSignalData(data)) {
           callback(data, peerId);
@@ -305,7 +315,7 @@ export class WebRTCManager {
     // Use the existing action, don't create a new one
     if (this.sendChunk) {
       console.log('Setting up chunk receive handler');
-      this.sendChunk.onMessage = (data: any, { peerId }: { peerId: string }) => {
+      this.sendChunk.onMessage = (data: unknown, { peerId }: { peerId: string }) => {
         console.log('📦 Received chunk data, size:', data?.byteLength || data?.length || 0);
 
         // Convert Uint8Array to ArrayBuffer if needed

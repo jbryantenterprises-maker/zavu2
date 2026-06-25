@@ -45,6 +45,8 @@ export class XavuApp {
   private cloudDownloadUrls: string[] = [];
   private cloudCleanupUserId: string | null = null;
   private senderFlowToken = 0;
+  private objectUrls: string[] = [];
+  private eventListeners: Array<{ element: EventTarget; event: string; listener: EventListener }> = [];
 
   constructor() {
     this.webrtc = new WebRTCManager();
@@ -347,17 +349,33 @@ export class XavuApp {
 
   private setupEventListeners() {
     // Prevent accidental navigation when dropping files
-    window.addEventListener('dragover', (e) => e.preventDefault());
-    window.addEventListener('drop', (e) => e.preventDefault());
+    const dragOverHandler = (e: Event) => e.preventDefault();
+    const dropHandler = (e: Event) => e.preventDefault();
+
+    window.addEventListener('dragover', dragOverHandler);
+    window.addEventListener('drop', dropHandler);
+
+    this.trackEventListener(window, 'dragover', dragOverHandler);
+    this.trackEventListener(window, 'drop', dropHandler);
   }
 
   private setupBeforeUnload() {
-    window.addEventListener('beforeunload', (e) => {
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
       if (this.transferInProgress) {
         e.preventDefault();
         e.returnValue = 'Transfer in progress. Are you sure you want to leave?';
       }
-    });
+    };
+
+    const pageHideHandler = () => {
+      this.cleanup();
+    };
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    window.addEventListener('pagehide', pageHideHandler);
+
+    this.trackEventListener(window, 'beforeunload', beforeUnloadHandler);
+    this.trackEventListener(window, 'pagehide', pageHideHandler);
   }
 
   // ── Cloud Download Detection ─────────────────────────────────────────
@@ -1023,6 +1041,7 @@ export class XavuApp {
         }
         // Create an automatic download
         this.activeDownloadLink = URL.createObjectURL(file);
+        this.trackObjectUrl(this.activeDownloadLink);
         const a = document.createElement('a');
         a.href = this.activeDownloadLink;
         a.download = file.name;
@@ -1198,6 +1217,36 @@ export class XavuApp {
   }
 
 
+
+    private cleanup() {
+    // Revoke all Object URLs to prevent memory leaks
+    this.objectUrls.forEach(url => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        Logger.error('Failed to revoke Object URL:', e);
+      }
+    });
+    this.objectUrls = [];
+
+    // Remove all event listeners
+    this.eventListeners.forEach(({ element, event, listener }) => {
+      try {
+        element.removeEventListener(event, listener);
+      } catch (e) {
+        Logger.error('Failed to remove event listener:', e);
+      }
+    });
+    this.eventListeners = [];
+  }
+
+  private trackObjectUrl(url: string) {
+    this.objectUrls.push(url);
+  }
+
+  private trackEventListener(element: EventTarget, event: string, listener: EventListener) {
+    this.eventListeners.push({ element, event, listener });
+  }
 
   // Link sharing methods — context-aware for P2P vs cloud
   async copyLink() {
