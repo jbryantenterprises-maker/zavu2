@@ -80,11 +80,12 @@ function defaultContentSecurityPolicy(): string {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://xavu-58a12-default-rtdb.firebaseio.com https://*.firebaseio.com https://*.rtdb.firebaseio.com https://*.googleapis.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://xavu-58a12-default-rtdb.firebaseio.com https://*.firebaseio.com https://*.rtdb.firebaseio.com https://*.googleapis.com https://*.firebaseapp.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob:",
     "connect-src 'self' https://www.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://*.googleapis.com https://xavu-58a12-default-rtdb.firebaseio.com wss://xavu-58a12-default-rtdb.firebaseio.com wss://*.firebaseio.com wss://*.rtdb.firebaseio.com wss: https:",
+    "frame-src 'self' https://*.firebaseapp.com https://*.firebase.google.com https://*.google.com https://apis.google.com",
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
   ].join('; ');

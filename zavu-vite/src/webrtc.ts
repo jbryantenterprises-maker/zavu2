@@ -140,7 +140,76 @@ export class WebRTCManager {
     };
 
     console.log('Created actions for room');
+
+    // Add global error handling for WebSocket issues on mobile
+    if (this.isMobileSafari) {
+      this.setupMobileErrorHandling();
+    }
+
     return this.currentRoom;
+  }
+
+  private setupMobileErrorHandling() {
+    // Show iOS Safari users a helpful message about WebSocket behavior
+    console.log('💡 iOS Safari Tip: Keep this tab active during transfers for best results');
+    console.log('💡 Backgrounding the tab may pause the connection temporarily');
+
+    // Listen for WebSocket errors which are common on mobile Safari
+    window.addEventListener('error', (event) => {
+      const errorMsg = event.message || '';
+      if (errorMsg.includes('WebSocket') || errorMsg.includes('suspension')) {
+        console.warn('📱 iOS Safari WebSocket issue detected (normal on mobile):', errorMsg);
+        console.log('💡 Tip: Keep the Safari tab active during transfers for best results');
+
+        // Show user-friendly notification for WebSocket issues
+        this.showMobileSafariTip('Connection paused - keep this tab open');
+      }
+    });
+
+    // Listen for visibility changes (tab backgrounding)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.currentRoom) {
+        console.warn('📱 iOS Safari tab backgrounded - WebRTC connection may become unstable');
+        console.log('💡 Tip: Return to this tab to maintain connection stability');
+        this.showMobileSafariTip('Return to this tab to maintain connection');
+      } else if (!document.hidden && this.currentRoom) {
+        console.log('📱 iOS Safari tab foregrounded - connection should stabilize');
+      }
+    });
+  }
+
+  private showMobileSafariTip(message: string) {
+    // Show a subtle toast notification for iOS Safari users
+    const existingTip = document.querySelector('.ios-safari-tip');
+    if (existingTip) {
+      existingTip.remove();
+    }
+
+    const tip = document.createElement('div');
+    tip.className = 'ios-safari-tip';
+    tip.textContent = message;
+    tip.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 255, 157, 0.1);
+      border: 1px solid #00ff9d;
+      color: #00ff9d;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 10000;
+      backdrop-filter: blur(10px);
+    `;
+
+    document.body.appendChild(tip);
+
+    setTimeout(() => {
+      tip.style.opacity = '0';
+      tip.style.transition = 'opacity 0.5s';
+      setTimeout(() => tip.remove(), 500);
+    }, 3000);
   }
 
   async joinRoom(roomId: string) {
