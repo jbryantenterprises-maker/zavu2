@@ -117,8 +117,8 @@ export class WebRTCManager {
 
     // makeAction returns a single object, not an array
     try {
-      this.sendSignal = this.currentRoom.makeAction('signal');
-      this.sendChunk = this.currentRoom.makeAction('chunk');
+      this.sendSignal = this.currentRoom.makeAction('signal') as unknown as TrysteroSender;
+      this.sendChunk = this.currentRoom.makeAction('chunk') as unknown as TrysteroSender;
       console.log('✅ Actions created successfully');
     } catch (error) {
       console.error('❌ Failed to create actions:', error);
@@ -316,7 +316,8 @@ export class WebRTCManager {
     if (this.sendChunk) {
       console.log('Setting up chunk receive handler');
       this.sendChunk.onMessage = (data: unknown, { peerId }: { peerId: string }) => {
-        console.log('📦 Received chunk data, size:', data?.byteLength || data?.length || 0);
+        const receivedData = data as { length?: number; byteLength?: number } | null | undefined;
+        console.log('📦 Received chunk data, size:', receivedData?.byteLength || receivedData?.length || 0);
 
         // Convert Uint8Array to ArrayBuffer if needed
         let arrayBufferData: ArrayBuffer;

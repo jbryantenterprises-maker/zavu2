@@ -37,6 +37,8 @@ export class XavuApp {
   private resumeReading: (() => void) | null = null;
   private fileReceiver: FileReceiver | null = null;
   private currentReceivingFileIndex: number = 0;
+  private receiverTransferActive: boolean = false;
+  private receiverTransferComplete: boolean = false;
   private activeDownloadLink: string | null = null;
   private checkoutStatusHandled: boolean = false;
   /** Tracks whether the current transfer is a cloud upload (for context-aware UI) */
@@ -744,6 +746,11 @@ export class XavuApp {
     this.webrtc.onPeerLeave((peerId) => {
       if (flowToken !== this.senderFlowToken) return;
       if (peerId === this.webrtc.getCurrentPeer()) {
+        if (!this.transferInProgress) {
+          UIHelper.updateElement('peer-status', '<span class="text-emerald-400">TRANSFER COMPLETE</span>');
+          return;
+        }
+
         UIHelper.updateElement('peer-status', '<span class="text-red-500">❌ DISCONNECTED</span>');
         UIHelper.updateElement('sender-progress-text', '<span class="text-red-500">Error: Receiver disconnected mid-transfer.</span>');
       }
@@ -1019,6 +1026,8 @@ export class XavuApp {
   private async connectAsReceiver(targetId: string) {
     await this.webrtc.joinRoom(targetId);
     this.receiverConnected = false; // Reset connection state
+    this.receiverTransferActive = false;
+    this.receiverTransferComplete = false;
 
     this.setupReceiverListeners();
 
@@ -1068,6 +1077,13 @@ export class XavuApp {
 
         UIHelper.updateElementText('receiver-progress-text', '✅ File received and decrypted!');
         UIHelper.confettiBurst();
+
+        const metadata = this.fileReceiver?.getMetadata();
+        const isFinalFile = !metadata?.files?.length || this.currentReceivingFileIndex >= metadata.files.length - 1;
+        if (isFinalFile) {
+          this.receiverTransferActive = false;
+          this.receiverTransferComplete = true;
+        }
         
         // Let sender know we received this file successfully
         const peer = this.webrtc.getCurrentPeer();
@@ -1090,6 +1106,7 @@ export class XavuApp {
       console.log('📨 Receiver received signal:', data.type);
       if (data.type === 'metadata') {
         console.log('📋 Received file metadata:', data.files);
+        this.receiverTransferComplete = false;
         await this.fileReceiver?.handleMetadata(data);
 
         // Show file info in UI
@@ -1108,6 +1125,8 @@ export class XavuApp {
       } else if (data.type === 'next_file') {
         console.log('📁 Starting next file:', data.name);
         // Setup for next file
+        this.receiverTransferActive = true;
+        this.receiverTransferComplete = false;
         this.currentReceivingFileIndex = data.index || 0;
         this.fileReceiver?.reset();
         UIHelper.updateElementText('receiver-progress-text', `Preparing file ${data.name}...`);
@@ -1126,6 +1145,8 @@ export class XavuApp {
         }
       } else if (data.type === 'end_all') {
         console.log('🎉 All files transferred');
+        this.receiverTransferActive = false;
+        this.receiverTransferComplete = true;
         UIHelper.updateElementText('receiver-progress-text', 'All files transferred completely! 🎉');
       }
     });
@@ -1157,6 +1178,16 @@ export class XavuApp {
 
     this.webrtc.onPeerLeave((peerId) => {
       if (peerId === this.webrtc.getCurrentPeer()) {
+        if (this.receiverTransferComplete) {
+          UIHelper.updateElementText('receiver-progress-text', 'All files transferred completely! 🎉');
+          return;
+        }
+
+        if (!this.receiverTransferActive) {
+          UIHelper.updateElementText('receiver-progress-text', 'Sender left the room.');
+          return;
+        }
+
         UIHelper.updateElementText('receiver-progress-text', '❌ Error: Sender disconnected mid-transfer.');
         // Clean up Object URL on disconnect
         if (this.activeDownloadLink) {
@@ -1175,6 +1206,8 @@ export class XavuApp {
       if (button) button.style.display = 'none';
 
       console.log('📤 Sending start_download signal to peer:', peer);
+      this.receiverTransferActive = true;
+      this.receiverTransferComplete = false;
       this.webrtc.sendSignalData({ type: 'start_download' }, peer);
       UIHelper.showElement('receiver-progress-area');
       UIHelper.updateElementText('receiver-progress-text', 'Connecting and requesting file...');
